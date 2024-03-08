@@ -1,0 +1,3 @@
+_target_: huggingface_hub.hf_hub_download
+repo_id: Salesforce/moirai-small
+filename: model.ckpt

@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "salesforce-uni2ts"
+dynamic = [
+  "version",
+]
+dependencies = [
+  "torch>=2.0",
+  "lightning>=2.0",
+  "gluonts~=0.14.3",
+  "numpy~=1.26.0",
+  "scipy~=1.11.3",
+  "einops==0.7.*",
+  "jaxtyping~=0.2.24",
+  "python-dotenv==1.0.0",
+  "hydra-core==1.3",
+  "orjson",
+  "tensorboard",
+  "multiprocess",
+  "huggingface_hub",
+  "datasets~=2.17.1",
+  "jax[cpu]",
+]
+requires-python = ">=3.10"
+authors = [
+  {name = "Gerald Woo", email = "gwoo@salesforce.com"},
+  {name = "Chenghao Liu", email = "chenghao.liu@salesforce.com"},
+  {name = "Akshat Kumar"},
+  {name = "Caiming Xiong"},
+  {name = "Silvio Savarese"},
+  {name = "Doyen Sahoo"},
+]
+maintainers = [
+  {name = "Gerald Woo", email = "gwoo@salesforce.com"}
+]
+description = "Unified Training of Universal Time Series Forecasting Transformers"
+readme = "README.md"
+license = {file = "LICENSE.txt"}
+keywords = ["Time Series Forecasting", "Transformer", "Deep Learning", "PyTorch"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==7.4.3",
+  "pytest_timeout==2.2.0",
+  "hatch",
+  "black[jupyter]==24.2.0",
+  "isort",
+  "pre-commit",
+]
+notebook = [
+  "jupyter",
+  "ipywidgets",
+  "matplotlib",
+]
+build-lotsa = [
+  "buildings_bench",
+  "pyreadr",
+  "tables",
+  "subseasonal-data"
+]
+
+[tool.hatch.version]
+path = "src/uni2ts/__about__.py"
+
+[tool.hatch.build]
+packages = ["src/uni2ts"]
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.pytest.ini_options]
+pythonpath = [
+  ".", "src",
+]

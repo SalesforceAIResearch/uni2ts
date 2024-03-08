@@ -1,0 +1,2 @@
+_target_: uni2ts.data.builder.lotsa_v1.Buildings900KDatasetBuilder
+datasets: ${cls_getattr:${._target_},dataset_list}
