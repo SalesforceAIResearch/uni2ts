@@ -29,7 +29,7 @@ class ImputationMethod:
     ) -> Num[np.ndarray, "length *dim"]: ...
 
 
-@dataclass
+@dataclass(frozen=True)
 class DummyValueImputation(ImputationMethod):
     value: int | float | complex = 0.0
 
@@ -40,7 +40,7 @@ class DummyValueImputation(ImputationMethod):
         return x
 
 
-@dataclass
+@dataclass(frozen=True)
 class LastValueImputation(ImputationMethod):
     value: int | float | complex = 0.0
 
