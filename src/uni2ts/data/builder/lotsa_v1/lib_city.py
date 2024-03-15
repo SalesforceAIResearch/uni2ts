@@ -33,19 +33,19 @@ from ._base import LOTSADatasetBuilder
 
 class LibCityDatasetBuilder(LOTSADatasetBuilder):
     dataset_list = [
+        "BEIJING_SUBWAY_30MIN",
+        "HZMETRO",
+        "LOOP_SEATTLE",
+        "LOS_LOOP",
+        "M_DENSE",
         "PEMS03",
         "PEMS04",
         "PEMS07",
         "PEMS08",
         "PEMS_BAY",
-        "LOS_LOOP",
-        "LOOP_SEATTLE",
-        "SZ_TAXI",
-        "BEIJING_SUBWAY_30MIN",
-        "HZMETRO",
-        "SHMETRO",
-        "ROTTERDAM",
         "Q-TRAFFIC",
+        "SHMETRO",
+        "SZ_TAXI",
     ]
     dataset_type_map = defaultdict(lambda: MultiSampleTimeSeriesDataset)
     dataset_load_func_map = defaultdict(
@@ -124,7 +124,14 @@ class LibCityDatasetBuilder(LOTSADatasetBuilder):
 
         def gen_func():
             for idx in df.entity_id.unique():
-                entity_df = df[df.entity_id == idx]
+                entity_df = df.query(f"entity_id == {idx}")
+                inferred_freq = pd.infer_freq(entity_df.index)
+                if inferred_freq is None:
+                    entity_df = entity_df.reindex(
+                        pd.date_range(
+                            entity_df.index[0], entity_df.index[-1], freq=freq
+                        )
+                    )
                 target = entity_df[data_col].to_numpy().astype(np.float32)
                 if target.ndim == 2:
                     if target.shape[-1] == 1:

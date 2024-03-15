@@ -113,6 +113,6 @@ for dataset in datasets:
         failed[dataset] = traceback.format_exc()
 
 if len(failed) > 0:
-    print("Failed:")
+    print(f"Failed: {list(failed.keys())}")
     for k, v in failed.items():
         print(f"{k}: {v}")
