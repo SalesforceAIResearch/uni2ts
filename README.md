@@ -7,7 +7,7 @@ Uni2TS also provides tools for fine-tuning, inference, and evaluation for time s
 
 ## 🎉 What's New
 
-* Mar 2024: Release of Uni2TS library, along with [Moirai](https://huggingface.co/collections/Salesforce/moirai-r-models-65c8d3a94c51428c300e0742) and [LOTSA data](https://huggingface.co/datasets/Salesforce/lotsa_data/)!
+* Mar 2024: Release of Uni2TS library, along with [Moirai-R](https://huggingface.co/collections/Salesforce/moirai-r-models-65c8d3a94c51428c300e0742) and [LOTSA data](https://huggingface.co/datasets/Salesforce/lotsa_data/)!
 
 ## ✅ TODO
 
@@ -25,7 +25,7 @@ Uni2TS also provides tools for fine-tuning, inference, and evaluation for time s
 
 [//]: # (- [ ] Data augmentations - down sampling, subsampling, aggregation)
 
-## Installation
+## ⚙️ Installation
 
 1. Clone repository:
 ```shell
@@ -44,7 +44,7 @@ virtualenv venv
 pip install -e '.[notebook]'
 ```
 
-## Getting Started
+## 🏃 Getting Started
 
 Let's see a simple example on how to use Uni2TS to make zero-shot forecasts from a pre-trained model. 
 We first load our data using pandas, in the form of a wide DataFrame. 
@@ -119,7 +119,7 @@ label = next(label_it)
 forecast = next(forecast_it)
 ```
 
-## Command Line Interface
+## 💻 Command Line Interface
 We provide several scripts which act as a [command line interface](cli) to easily run fine-tuning, evaluation, and even pre-training jobs. 
 [Configurations](cli/conf) are managed with the [Hydra](https://hydra.cc/) framework.
 
@@ -207,10 +207,10 @@ python -m cli.pretrain \
   data=lotsa_v1_unweighted
 ```
 
-## Jupyter Notebook Examples
+## 📔 Jupyter Notebook Examples
 See the [example folder](example) for more examples on common tasks, e.g. visualizing forecasts, predicting from pandas DataFrame, etc.
 
-## Citing Uni2TS
+## 👀 Citing Uni2TS
 
 If you're using Uni2TS in your research or applications, please cite it using this BibTeX:
 
