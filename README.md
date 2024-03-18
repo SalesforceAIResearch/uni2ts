@@ -203,7 +203,7 @@ See the [relevant](cli/pretrain.py) [files](cli/conf/pretrain) on how to further
 ```shell
 python -m cli.pretrain \
   run_name=first_run \
-  model=moirai_R_small \
+  model=moirai_small \
   data=lotsa_v1_unweighted
 ```
 
