@@ -15,7 +15,9 @@ Uni2TS also provides tools for fine-tuning, inference, and evaluation for time s
 
 [//]: # (- [ ] Support more pre-training paradigms)
 
-[//]: # (  - [ ] Self-supervised learning)
+[//]: # (  - [ ] &#40;Non-&#41;Contrastive learning)
+
+[//]: # (  - [ ] Masked Autoencoder)
 
 [//]: # (  - [ ] Next token prediction)
 
@@ -88,12 +90,12 @@ test_data = test_template.generate_instances(
 )
 ```
 
-Now that we have loaded our data, we prepare our pre-trained model by downloading model weights from [Hugging Face Hub](https://huggingface.co/)
+Now that we have loaded our data, we prepare our pre-trained model by downloading model weights from [Hugging Face Hub](https://huggingface.co/collections/Salesforce/moirai-r-models-65c8d3a94c51428c300e0742)
 
 ```python
 model = MoiraiForecast.load_from_checkpoint(
     checkpoint_path=hf_hub_download(
-        repo_id=f"Salesforce/moirai-{SIZE}", filename="model.ckpt"
+        repo_id=f"Salesforce/moirai-R-{SIZE}", filename="model.ckpt"
     ),
     prediction_length=PDT,
     context_length=CTX,
@@ -150,7 +152,7 @@ python -m uni2ts.data.builder.simple ETTh1 dataset/ETT-small/ETTh1.csv --date_of
 ```shell
 python -m cli.finetune \
   run_name=example_run \ 
-  model=moirai_small \ 
+  model=moirai_R_small \ 
   data=etth1 \ 
   val_data=etth1  
 ```
@@ -158,14 +160,33 @@ python -m cli.finetune \
 ### Evaluation
 
 The evaluation script can be used to calculate evaluation metrics such as MSE, MASE, CRPS, and so on (see the [configuration file](cli/conf/eval/default.yaml)). 
-We provide access to popular datasets, and can be toggled via the [data configurations](cli/conf/eval/data).
 
+Following up on the fine-tuning example, we can now perform evaluation on the test split by running the following script:
 ```shell
 python -m cli.eval \ 
-  data=etth1_val \ 
+  data=etth1_test \ 
   patch_size=32 \ 
   context_length=1000 \ 
-  checkpoint_path=moirai_small
+  checkpoint_path=moirai_R_small
+```
+
+Alternatively, we provide access to popular datasets, and can be toggled via the [data configurations](cli/conf/eval/data).
+As an example, say we want to perform evaluation, again on the ETTh1 dataset from the popular [Long Sequence Forecasting benchmark](https://github.com/thuml/Time-Series-Library).
+We first need to download the pre-processed datasets and put them in the correct directory, by setting up the TSLib repository and following the instructions.
+Then, assign the dataset directory to the `LSF_PATH` environment variable:
+```shell
+echo "LSF_PATH=PATH_TO_TSLIB/dataset" >> .env
+```
+
+Thereafter, simply run the following script with the predefined [Hydra config file](cli/conf/eval/data/lsf_test.yaml):
+```shell
+python -m cli.eval \ 
+  data=lsf_test \
+  data.dataset_name=ETTh1 \
+  data.prediction_length=96 \ 
+  patch_size=32 \ 
+  context_length=1000 \ 
+  checkpoint_path=moirai_R_small
 ```
 
 ### Pre-training
@@ -180,9 +201,9 @@ echo "LOTSA_V1_PATH=PATH_TO_SAVE" >> .env
 Then, we can simply run the following script to start a pre-training job. 
 See the [relevant](cli/pretrain.py) [files](cli/conf/pretrain) on how to further customize the settings.
 ```shell
-python -m uni2ts.cli.pretrain \
+python -m cli.pretrain \
   run_name=first_run \
-  model=moirai_small \
+  model=moirai_R_small \
   data=lotsa_v1_unweighted
 ```
 
