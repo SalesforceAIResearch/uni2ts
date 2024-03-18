@@ -7,7 +7,7 @@ Uni2TS also provides tools for fine-tuning, inference, and evaluation for time s
 
 ## 🎉 What's New
 
-* Mar 2024: Release of Uni2TS library, along with Moirai and LOTSA data!
+* Mar 2024: Release of Uni2TS library, along with [Moirai](https://huggingface.co/collections/Salesforce/moirai-r-models-65c8d3a94c51428c300e0742) and [LOTSA data](https://huggingface.co/datasets/Salesforce/lotsa_data/)!
 
 ## ✅ TODO
 
@@ -191,7 +191,7 @@ python -m cli.eval \
 
 ### Pre-training
 Now, let's see how you can pre-train your own model. 
-We'll start with preparing the data for pre-training first, by downloading the Large-scale Open Time Series Archive (LOTSA data).
+We'll start with preparing the data for pre-training first, by downloading the [Large-scale Open Time Series Archive (LOTSA data)](https://huggingface.co/datasets/Salesforce/lotsa_data/).
 Assuming you've already createed a `.env` file, run the following commands.
 ```shell
 huggingface-cli download Salesforce/lotsa_data --repo-type=dataset --local-dir PATH_TO_SAVE
