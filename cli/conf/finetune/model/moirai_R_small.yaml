@@ -9,8 +9,8 @@ _args_:
         - _target_: uni2ts.distribution.NormalFixedScaleOutput
         - _target_: uni2ts.distribution.NegativeBinomialOutput
         - _target_: uni2ts.distribution.LogNormalOutput
-    d_model: 768
-    num_layers: 12
+    d_model: 384
+    num_layers: 6
     patch_sizes: ${as_tuple:[8, 16, 32, 64, 128]}
     max_seq_len: 512
     attn_dropout_p: 0.0
@@ -27,8 +27,8 @@ _args_:
   beta1: 0.9
   beta2: 0.98
   num_training_steps: ${mul:${trainer.max_epochs},${train_dataloader.num_batches_per_epoch}}
-  num_warmup_steps: 10_000
+  num_warmup_steps: 0
   checkpoint_path:
     _target_: huggingface_hub.hf_hub_download
-    repo_id: Salesforce/moirai-base
+    repo_id: Salesforce/moirai-R-small
     filename: model.ckpt
