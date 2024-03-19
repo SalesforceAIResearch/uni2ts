@@ -92,9 +92,15 @@ class LibCityDatasetBuilder(LOTSADatasetBuilder):
 
         past_feat_dynamic_real_dict = {}
         if (lib_city_path / f"{dataset}/{dataset}.ext").exists():
-            ext = pd.read_csv(lib_city_path / f"{dataset}/{dataset}.ext")
-            ext_col = config["info"]["ext_col"]
-            cov = ext[ext_col].to_numpy()
+            ext_df = pd.read_csv(lib_city_path / f"{dataset}/{dataset}.ext")
+            ext_df["time"] = pd.to_datetime(ext_df["time"])
+            ext_df = ext_df.set_index("time")
+            ext_df = ext_df[config["info"]["ext_col"]]
+            if pd.infer_freq(ext_df.index) is None:
+                ext_df = ext_df.reindex(
+                    pd.date_range(ext_df.index[0], ext_df.index[-1], freq=freq)
+                )
+            cov = ext_df.to_numpy()
             if cov.shape[-1] == 1:
                 cov = cov.squeeze(-1)
             else:
