@@ -1,5 +1,5 @@
 # Unified Training of Universal Time Series Forecasting Transformers
-[Paper](https://arxiv.org/abs/2402.02592) | Blog post
+[Paper](https://arxiv.org/abs/2402.02592) | [Blog Post](https://blog.salesforceairesearch.com/moirai/)
 
 Uni2TS is a PyTorch based library for research and applications related to Time Series Transformers.
 This library aims to provide a unified solution to large-scale pre-training of Universal Time Series Transformers.
