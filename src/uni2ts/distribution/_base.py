@@ -95,8 +95,8 @@ class DistrParamProj(nn.Module):
         params_unbounded = tree_map(
             lambda proj: rearrange(
                 proj(x, out_feat_size),
-                "... (dim out) -> ... out dim",
-                out=self.out_size,
+                "... (dim out_size) -> ... out_size dim",
+                out_size=self.out_size,
             ),
             convert_to_container(self.proj),
         )
