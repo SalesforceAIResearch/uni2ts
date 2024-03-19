@@ -425,6 +425,7 @@ class MoiraiForecast(L.LightningModule):
         x: torch.Tensor,
         dim: int,
         left: bool = True,
+        value: Optional[float] = None,
     ) -> torch.Tensor:
         if dim >= 0:
             dim = -x.ndim + dim
@@ -434,7 +435,7 @@ class MoiraiForecast(L.LightningModule):
         else:
             pad = (0, pad_length)
         pad = (0, 0) * (abs(dim) - 1) + pad
-        return torch.nn.functional.pad(x, pad)
+        return torch.nn.functional.pad(x, pad, value=value)
 
     def _generate_time_id(
         self,
@@ -541,7 +542,7 @@ class MoiraiForecast(L.LightningModule):
             ]
         )
         if future_observed_target is None:
-            future_observed_target = torch.zeros(
+            future_observed_target = torch.ones(
                 batch_shape
                 + (
                     self.hparams.prediction_length,
@@ -575,7 +576,7 @@ class MoiraiForecast(L.LightningModule):
             ]
         )
         if future_is_pad is None:
-            future_is_pad = torch.ones(
+            future_is_pad = torch.zeros(
                 batch_shape + (self.hparams.prediction_length,),
                 dtype=torch.long,
                 device=device,
@@ -586,7 +587,7 @@ class MoiraiForecast(L.LightningModule):
                     reduce(
                         (
                             self._patched_seq_pad(
-                                patch_size, past_is_pad, -1, left=True
+                                patch_size, past_is_pad, -1, left=True, value=1
                             )
                             == 0
                         ).int(),
@@ -601,7 +602,7 @@ class MoiraiForecast(L.LightningModule):
                     reduce(
                         (
                             self._patched_seq_pad(
-                                patch_size, future_is_pad, -1, left=False
+                                patch_size, future_is_pad, -1, left=False, value=1
                             )
                             == 0
                         ).int(),
@@ -692,21 +693,6 @@ class MoiraiForecast(L.LightningModule):
                         (0, self.max_patch_size - patch_size),
                     ),
                 ]
-            )
-            tt = torch.nn.functional.pad(
-                rearrange(
-                    self._patched_seq_pad(
-                        patch_size,
-                        observed_feat_dynamic_real[
-                            ..., : self.hparams.context_length, :
-                        ],
-                        -2,
-                        left=True,
-                    ),
-                    "... (seq patch) dim -> ... (dim seq) patch",
-                    patch=patch_size,
-                ),
-                (0, self.max_patch_size - patch_size),
             )
             observed_mask.extend(
                 [
