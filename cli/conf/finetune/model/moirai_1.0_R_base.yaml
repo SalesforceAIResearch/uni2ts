@@ -30,5 +30,5 @@ _args_:
   num_warmup_steps: 0
   checkpoint_path:
     _target_: huggingface_hub.hf_hub_download
-    repo_id: Salesforce/moirai-R-base
+    repo_id: Salesforce/moirai-1.0-R-base
     filename: model.ckpt

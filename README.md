@@ -7,7 +7,7 @@ Uni2TS also provides tools for fine-tuning, inference, and evaluation for time s
 
 ## 🎉 What's New
 
-* Mar 2024: Release of Uni2TS library, along with [Moirai-R](https://huggingface.co/collections/Salesforce/moirai-r-models-65c8d3a94c51428c300e0742) and [LOTSA data](https://huggingface.co/datasets/Salesforce/lotsa_data/)!
+* Mar 2024: Release of Uni2TS library, along with [Moirai-1.0-R](https://huggingface.co/collections/Salesforce/moirai-1.0-r-models-65c8d3a94c51428c300e0742) and [LOTSA data](https://huggingface.co/datasets/Salesforce/lotsa_data/)!
 
 ## ✅ TODO
 
@@ -98,7 +98,7 @@ test_data = test_template.generate_instances(
 # Prepare pre-trained model by downloading model weights from huggingface hub
 model = MoiraiForecast.load_from_checkpoint(
     checkpoint_path=hf_hub_download(
-        repo_id=f"Salesforce/moirai-R-{SIZE}", filename="model.ckpt"
+        repo_id=f"Salesforce/moirai-1.0-R-{SIZE}", filename="model.ckpt"
     ),
     prediction_length=PDT,
     context_length=CTX,
@@ -163,7 +163,7 @@ python -m uni2ts.data.builder.simple ETTh1 dataset/ETT-small/ETTh1.csv --date_of
 ```shell
 python -m cli.finetune \
   run_name=example_run \ 
-  model=moirai_R_small \ 
+  model=moirai_1.0_R_small \ 
   data=etth1 \ 
   val_data=etth1  
 ```
@@ -178,7 +178,7 @@ python -m cli.eval \
   data=etth1_test \ 
   patch_size=32 \ 
   context_length=1000 \ 
-  checkpoint_path=moirai_R_small
+  checkpoint_path=moirai_1.0_R_small
 ```
 
 Alternatively, we provide access to popular datasets, and can be toggled via the [data configurations](cli/conf/eval/data).
@@ -197,7 +197,7 @@ python -m cli.eval \
   data.prediction_length=96 \ 
   patch_size=32 \ 
   context_length=1000 \ 
-  checkpoint_path=moirai_R_small
+  checkpoint_path=moirai_1.0_R_small
 ```
 
 ### Pre-training
