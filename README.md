@@ -44,6 +44,11 @@ virtualenv venv
 pip install -e '.[notebook]'
 ```
 
+4) Create a `.env` file:
+```shell
+touch .env
+```
+
 ## 🏃 Getting Started
 
 Let's see a simple example on how to use Uni2TS to make zero-shot forecasts from a pre-trained model. 
@@ -57,6 +62,7 @@ from gluonts.dataset.pandas import PandasDataset
 from gluonts.dataset.split import split
 from huggingface_hub import hf_hub_download
 
+from uni2ts.eval_util.plot import plot_single
 from uni2ts.model.moirai import MoiraiForecast
 
 
@@ -88,11 +94,8 @@ test_data = test_template.generate_instances(
     windows=TEST // PDT,  # number of windows in rolling window evaluation
     distance=PDT,  # number of time steps between each window - distance=PDT for non-overlapping windows
 )
-```
 
-Now that we have loaded our data, we prepare our pre-trained model by downloading model weights from [Hugging Face Hub](https://huggingface.co/collections/Salesforce/moirai-r-models-65c8d3a94c51428c300e0742)
-
-```python
+# Prepare pre-trained model by downloading model weights from huggingface hub
 model = MoiraiForecast.load_from_checkpoint(
     checkpoint_path=hf_hub_download(
         repo_id=f"Salesforce/moirai-R-{SIZE}", filename="model.ckpt"
@@ -117,6 +120,15 @@ forecast_it = iter(forecasts)
 inp = next(input_it)
 label = next(label_it)
 forecast = next(forecast_it)
+
+plot_single(
+    inp, 
+    label, 
+    forecast, 
+    context_length=200,
+    name="pred",
+    show_label=True,
+)
 ```
 
 ## 💻 Command Line Interface
@@ -132,7 +144,6 @@ For more complex use cases, see [this notebook](example/prepare_data.ipynb) for 
 
 1. To begin the process, add the path to the directory where you want to save the processed dataset into the ```.env``` file.
 ```shell
-touch .env
 echo "CUSTOM_DATA_PATH=PATH_TO_SAVE" >> .env
 ```
 
