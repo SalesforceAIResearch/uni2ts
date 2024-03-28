@@ -13,8 +13,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-import os
-
 import hydra
 import torch
 from gluonts.time_feature import get_seasonality
@@ -32,14 +30,11 @@ def main(cfg: DictConfig):
     test_data, metadata = call(cfg.data)
     batch_size = cfg.batch_size
     while True:
-        model = call(cfg.load_from_checkpoint)(
+        model = call(cfg.model, _partial_=True)(
             prediction_length=metadata.prediction_length,
-            checkpoint_path=call(cfg.checkpoint_path),
             target_dim=metadata.target_dim,
             feat_dynamic_real_dim=metadata.feat_dynamic_real_dim,
             past_feat_dynamic_real_dim=metadata.past_feat_dynamic_real_dim,
-            context_length=cfg.context_length,
-            patch_size=cfg.patch_size,
         )
         metrics = instantiate(cfg.metrics, _convert_="all")
         try:
@@ -56,13 +51,7 @@ def main(cfg: DictConfig):
             )
             print(res)
             output_dir = HydraConfig.get().runtime.output_dir
-            writer = SummaryWriter(
-                log_dir=os.path.join(
-                    output_dir,
-                    f"patch_size={cfg.patch_size}",
-                    f"context_length={cfg.context_length}",
-                )
-            )
+            writer = SummaryWriter(log_dir=output_dir)
             for name, metric in res.to_dict("records")[0].items():
                 writer.add_scalar(f"{metadata.split}_metrics/{name}", metric)
             writer.close()
@@ -74,8 +63,8 @@ def main(cfg: DictConfig):
             batch_size //= 2
             if batch_size < cfg.min_batch_size:
                 print(
-                    f"batch_size {batch_size} smaller than min_batch_size {cfg.min_batch_size}, "
-                    f"ending evaluation of patch_size {cfg.patch_size}, context_length {cfg.context_length}"
+                    f"batch_size {batch_size} smaller than "
+                    f"min_batch_size {cfg.min_batch_size}, ending evaluation"
                 )
                 break
 
