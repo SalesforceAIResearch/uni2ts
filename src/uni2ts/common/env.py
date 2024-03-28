@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 import os
+import warnings
 from pathlib import Path
 from typing import Optional
 
@@ -39,7 +40,7 @@ class Env:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             if not load_dotenv():
-                raise ValueError("Failed to load .env file")
+                warnings.warn("Failed to load .env file.")
             cls.monkey_patch_path_vars()
         return cls._instance
 
