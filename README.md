@@ -178,7 +178,7 @@ The evaluation script can be used to calculate evaluation metrics such as MSE, M
 Following up on the fine-tuning example, we can now perform evaluation on the test split by running the following script:
 ```shell
 python -m cli.eval \ 
-  run_name=example_eval \
+  run_name=example_eval_1 \
   model=moirai_1.0_R_small \
   model.patch_size=32 \ 
   model.context_length=1000 \
@@ -196,7 +196,7 @@ echo "LSF_PATH=PATH_TO_TSLIB/dataset" >> .env
 Thereafter, simply run the following script with the predefined [Hydra config file](cli/conf/eval/data/lsf_test.yaml):
 ```shell
 python -m cli.eval \ 
-  run_name=example_eval \
+  run_name=example_eval_2 \
   model=moirai_1.0_R_small \
   model.patch_size=32 \ 
   model.context_length=1000 \ 
