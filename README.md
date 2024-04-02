@@ -131,6 +131,9 @@ plot_single(
 )
 ```
 
+## 📔 Jupyter Notebook Examples
+See the [example folder](example) for more examples on common tasks, e.g. visualizing forecasts, predicting from pandas DataFrame, etc.
+
 ## 💻 Command Line Interface
 We provide several scripts which act as a [command line interface](cli) to easily run fine-tuning, evaluation, and even pre-training jobs. 
 [Configurations](cli/conf) are managed with the [Hydra](https://hydra.cc/) framework.
@@ -175,10 +178,11 @@ The evaluation script can be used to calculate evaluation metrics such as MSE, M
 Following up on the fine-tuning example, we can now perform evaluation on the test split by running the following script:
 ```shell
 python -m cli.eval \ 
-  data=etth1_test \ 
-  patch_size=32 \ 
-  context_length=1000 \ 
-  checkpoint_path=moirai_1.0_R_small
+  run_name=example_eval_1 \
+  model=moirai_1.0_R_small \
+  model.patch_size=32 \ 
+  model.context_length=1000 \
+  data=etth1_test
 ```
 
 Alternatively, we provide access to popular datasets, and can be toggled via the [data configurations](cli/conf/eval/data).
@@ -192,12 +196,13 @@ echo "LSF_PATH=PATH_TO_TSLIB/dataset" >> .env
 Thereafter, simply run the following script with the predefined [Hydra config file](cli/conf/eval/data/lsf_test.yaml):
 ```shell
 python -m cli.eval \ 
+  run_name=example_eval_2 \
+  model=moirai_1.0_R_small \
+  model.patch_size=32 \ 
+  model.context_length=1000 \ 
   data=lsf_test \
   data.dataset_name=ETTh1 \
-  data.prediction_length=96 \ 
-  patch_size=32 \ 
-  context_length=1000 \ 
-  checkpoint_path=moirai_1.0_R_small
+  data.prediction_length=96 
 ```
 
 ### Pre-training
@@ -217,9 +222,6 @@ python -m cli.pretrain \
   model=moirai_small \
   data=lotsa_v1_unweighted
 ```
-
-## 📔 Jupyter Notebook Examples
-See the [example folder](example) for more examples on common tasks, e.g. visualizing forecasts, predicting from pandas DataFrame, etc.
 
 ## 👀 Citing Uni2TS
 
