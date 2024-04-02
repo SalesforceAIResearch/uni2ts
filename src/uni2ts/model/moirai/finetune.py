@@ -61,6 +61,10 @@ from .module import MoiraiModule
 
 
 class MoiraiFinetune(L.LightningModule):
+    """
+    Moirai for Fine-tuning
+    """
+
     seq_fields: tuple[str, ...] = (
         "target",
         "observed_mask",
@@ -157,6 +161,7 @@ class MoiraiFinetune(L.LightningModule):
     def training_step(
         self, batch: dict[str, torch.Tensor], batch_idx: int
     ) -> torch.Tensor:
+        # `**` unpacks a dict's items: each key-value pair is passed as a kwarg to the function
         loss = self.loss(**batch)
         batch_size = (
             batch["sample_id"].max(dim=1).values.sum() if "sample_id" in batch else None
@@ -198,12 +203,15 @@ class MoiraiFinetune(L.LightningModule):
         decay = set()
         no_decay = set()
 
+        # Decay
         whitelist_params = (
             LearnedProjection,
             MultiInSizeLinear,
             MultiOutSizeLinear,
             nn.Linear,
         )
+
+        # No decay
         blacklist_params = (
             BinaryAttentionBias,
             LearnedEmbedding,
@@ -218,11 +226,11 @@ class MoiraiFinetune(L.LightningModule):
                     continue
 
                 fpn = f"{mn}.{pn}" if mn else pn
-                if pn.endswith("bias"):
+                if pn.endswith("bias"):  # All bias no decay
                     no_decay.add(fpn)
-                elif pn.endswith("weight") and isinstance(m, whitelist_params):
+                elif pn.endswith("weight") and isinstance(m, whitelist_params):  # Weights in white decay
                     decay.add(fpn)
-                elif pn.endswith("weight") and isinstance(m, blacklist_params):
+                elif pn.endswith("weight") and isinstance(m, blacklist_params):  # Weights in black no decay
                     no_decay.add(fpn)
 
         # validate that we considered every parameter
@@ -275,6 +283,8 @@ class MoiraiFinetune(L.LightningModule):
         }
 
     def create_train_transform(self) -> Transformation:
+        # Out of the PL Trainer pipeline, a custom step.
+        # Called in cli/finetune.py to process the training dataset.
         return (
             SampleDimension(
                 max_dim=self.hparams.max_dim,

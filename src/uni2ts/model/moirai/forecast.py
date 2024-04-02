@@ -68,6 +68,10 @@ class PackedNLLLoss(_PackedNLLLoss):
 
 
 class MoiraiForecast(L.LightningModule):
+    """
+    Moirai for forecasting. Load the ckpt from fine-tuning or pre-training.
+    """
+
     def __init__(
         self,
         module_kwargs: dict[str, Any],
@@ -80,7 +84,7 @@ class MoiraiForecast(L.LightningModule):
         num_samples: int = 100,
     ):
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters()  # PL: save all the hyperparameters passed to init into self.hparams
         self.module = MoiraiModule(**module_kwargs)
         self.per_sample_loss_func = PackedNLLLoss()
 
@@ -89,14 +93,18 @@ class MoiraiForecast(L.LightningModule):
         batch_size: int,
         device: str = "auto",
     ) -> PyTorchPredictor:
+
         ts_fields = []
         if self.hparams.feat_dynamic_real_dim > 0:
             ts_fields.append("feat_dynamic_real")
             ts_fields.append("observed_feat_dynamic_real")
+
         past_ts_fields = []
         if self.hparams.past_feat_dynamic_real_dim > 0:
             past_ts_fields.append("past_feat_dynamic_real")
             past_ts_fields.append("past_observed_feat_dynamic_real")
+
+        # GLU: Instance splitter used by the Temporal Fusion Transformer model. It returns known dynamic features as a single tensor of shape […, context_length + prediction_length, …] without splitting it into past & future parts
         instance_splitter = TFTInstanceSplitter(
             instance_sampler=TestSplitSampler(),
             past_length=self.past_length,
@@ -190,9 +198,15 @@ class MoiraiForecast(L.LightningModule):
         )
 
     def context_token_length(self, patch_size: int) -> int:
+        """
+        Number of patches/tokens in context range
+        """
         return math.ceil(self.hparams.context_length / patch_size)
 
     def prediction_token_length(self, patch_size) -> int:
+        """
+        Number of patches/tokens in prediction range
+        """
         return math.ceil(self.hparams.prediction_length / patch_size)
 
     @property
@@ -291,9 +305,9 @@ class MoiraiForecast(L.LightningModule):
                         past_target.shape[-1],
                     )
                 )
-            val_loss = torch.stack(val_loss)
+            val_loss = torch.stack(val_loss)  # (patch_sizes, bs)
             preds = torch.stack(preds)
-            idx = val_loss.argmin(dim=0)
+            idx = val_loss.argmin(dim=0)  # bs; for each sample, use the patch_size with the lowest val loss
             return preds[idx, torch.arange(len(idx), device=idx.device)]
         else:
             distr = self._get_distr(
@@ -306,6 +320,8 @@ class MoiraiForecast(L.LightningModule):
                 past_feat_dynamic_real,
                 past_observed_feat_dynamic_real,
             )
+
+            # preds: (sample batch combine_seq patch)
             preds = distr.sample(torch.Size((num_samples or self.hparams.num_samples,)))
             return self._format_preds(
                 self.hparams.patch_size, preds, past_target.shape[-1]
@@ -338,14 +354,16 @@ class MoiraiForecast(L.LightningModule):
             prediction_mask,
         ) = self._convert(
             patch_size,
+            # Slice the context if self.hparams.patch_size is 'auto'
             past_target=target[..., : self.hparams.context_length, :],
             past_observed_target=observed_target[..., : self.hparams.context_length, :],
             past_is_pad=is_pad[..., : self.hparams.context_length],
+
+            # future is included in target if self.hparams.patch_size is 'auto', else None.
             future_target=target[..., self.hparams.context_length :, :],
-            future_observed_target=observed_target[
-                ..., self.hparams.context_length :, :
-            ],
+            future_observed_target=observed_target[..., self.hparams.context_length :, :],
             future_is_pad=is_pad[..., self.hparams.context_length :],
+
             feat_dynamic_real=feat_dynamic_real,
             observed_feat_dynamic_real=observed_feat_dynamic_real,
             past_feat_dynamic_real=past_feat_dynamic_real,
@@ -427,6 +445,9 @@ class MoiraiForecast(L.LightningModule):
         left: bool = True,
         value: Optional[float] = None,
     ) -> torch.Tensor:
+        """
+        pad x along dimension `dim` so that the size of `dim` is a multiple of patch_size.
+        """
         if dim >= 0:
             dim = -x.ndim + dim
         pad_length = -x.size(dim) % patch_size
@@ -444,13 +465,16 @@ class MoiraiForecast(L.LightningModule):
     ) -> tuple[
         Int[torch.Tensor, "batch past_token"], Int[torch.Tensor, "batch future_token"]
     ]:
+
+        # (bs, num_patches). Patches from unobserved range are False, others are True.
         past_seq_id = reduce(
+            # Pad along the time step dimension
             self._patched_seq_pad(patch_size, past_observed_target, -2, left=True),
             "... (seq patch) dim -> ... seq",
             "max",
             patch=patch_size,
         )
-        past_seq_id = torch.clamp(past_seq_id.cumsum(dim=-1) - 1, min=0)
+        past_seq_id = torch.clamp(past_seq_id.cumsum(dim=-1) - 1, min=0)  # Cumulate
         batch_shape = " ".join(map(str, past_observed_target.shape[:-2]))
         future_seq_id = (
             repeat(
@@ -494,6 +518,12 @@ class MoiraiForecast(L.LightningModule):
         Int[torch.Tensor, "batch combine_seq"],  # variate_id
         Bool[torch.Tensor, "batch combine_seq"],  # prediction_mask
     ]:
+        """
+
+
+
+        """
+
         batch_shape = past_target.shape[:-2]
         device = past_target.device
 
@@ -505,10 +535,16 @@ class MoiraiForecast(L.LightningModule):
         prediction_mask = []
         dim_count = 0
 
+        # P represents the number of patches for each variate.
+
+        # 'past_seq_id': (bs, P_past) time id for patches in context range.
+        # If patch is from padding, then the id is 0.
+        # 'future_seq_id': (bs, P_future) time id for patches in prediction range.
         past_seq_id, future_seq_id = self._generate_time_id(
             patch_size, past_observed_target
         )
 
+        # If self.hparams.patch_size is not 'auto', set future_target as zeros
         if future_target is None:
             future_target = torch.zeros(
                 batch_shape
@@ -519,6 +555,10 @@ class MoiraiForecast(L.LightningModule):
                 dtype=past_target.dtype,
                 device=device,
             )
+
+        # Patching and flatten MTS to one sequence --> (bs, P x num_tgt, patch_size)
+        # target will be a list of 2 tensors:
+        # [(bs, P_past x num_tgt, patch_size), (bs, P_future x num_tgt, patch_size)]
         target.extend(
             [
                 torch.nn.functional.pad(
@@ -527,7 +567,7 @@ class MoiraiForecast(L.LightningModule):
                         "... (seq patch) dim -> ... (dim seq) patch",
                         patch=patch_size,
                     ),
-                    (0, self.max_patch_size - patch_size),
+                    (0, self.max_patch_size - patch_size),  # ? Many zeros patches?
                 ),
                 torch.nn.functional.pad(
                     rearrange(
@@ -541,6 +581,8 @@ class MoiraiForecast(L.LightningModule):
                 ),
             ]
         )
+
+        # If self.hparams.patch_size is not 'auto', set future_observed_target as ones
         if future_observed_target is None:
             future_observed_target = torch.ones(
                 batch_shape
@@ -551,6 +593,10 @@ class MoiraiForecast(L.LightningModule):
                 dtype=torch.bool,
                 device=device,
             )
+
+        # observed_mask
+        # will be a list of 2 boolean tensors:
+        # [(bs, P_past x num_tgt, patch_size), (bs, P_future x num_tgt, patch_size)]
         observed_mask.extend(
             [
                 torch.nn.functional.pad(
@@ -575,14 +621,20 @@ class MoiraiForecast(L.LightningModule):
                 ),
             ]
         )
+
+        # If self.hparams.patch_size is not 'auto', set future_is_pad as zeros
         if future_is_pad is None:
             future_is_pad = torch.zeros(
                 batch_shape + (self.hparams.prediction_length,),
                 dtype=torch.long,
                 device=device,
             )
+
+        # sample_id: If the patch in the flatten sequence is from padding .
+        # will be a list of 2 0/1 tensors: [(bs, tgt x P_past), (bs, tgt x P_future)]
+        # 1: not from padding, 0: from padding.
         sample_id.extend(
-            [
+            [    # past_is_pad is in shape of "batch past_time".
                 repeat(
                     reduce(
                         (
@@ -590,12 +642,12 @@ class MoiraiForecast(L.LightningModule):
                                 patch_size, past_is_pad, -1, left=True, value=1
                             )
                             == 0
-                        ).int(),
-                        "... (seq patch) -> ... seq",
+                        ).int(),  # Turn to 0 / 1
+                        "... (seq patch) -> ... seq",  # (bs, P)
                         "max",
                         patch=patch_size,
                     ),
-                    "... seq -> ... (dim seq)",
+                    "... seq -> ... (dim seq)",  #  (bs, tgt x P)
                     dim=past_target.shape[-1],
                 ),
                 repeat(
@@ -615,10 +667,17 @@ class MoiraiForecast(L.LightningModule):
                 ),
             ]
         )
+
+        # Time id for patches in flatten sequence.
+        # A list with 2*num_tgt tensors: [past_seq_id * num_tgt, future_seq_id * num_tgt]
         time_id.extend(
             [past_seq_id] * past_target.shape[-1]
             + [future_seq_id] * past_target.shape[-1]
         )
+
+        # Variate id for patches in flatten sequence.
+        # Each id is from 0 to num_tgt-1.
+        # A list with 2 tensors: [(bs, P_past x num_tgt), (bs, P_future x num_tgt)]
         variate_id.extend(
             [
                 repeat(
@@ -633,7 +692,11 @@ class MoiraiForecast(L.LightningModule):
                 ),
             ]
         )
-        dim_count += past_target.shape[-1]
+
+        dim_count += past_target.shape[-1]  # Update dim_count
+
+        # Prediction mask. Not in the shape of flatten sequence.
+        # A list of 2 Boolean tensors: [(bs, P_past * num_tgt), (bs, P_future * num_tgt)]
         prediction_mask.extend(
             [
                 torch.zeros(
@@ -869,6 +932,7 @@ class MoiraiForecast(L.LightningModule):
                 )
             )
 
+        # Concatenate past and future along the patch axis.
         target = torch.cat(target, dim=-2)
         observed_mask = torch.cat(observed_mask, dim=-2)
         sample_id = torch.cat(sample_id, dim=-1)
@@ -876,12 +940,12 @@ class MoiraiForecast(L.LightningModule):
         variate_id = torch.cat(variate_id, dim=-1)
         prediction_mask = torch.cat(prediction_mask, dim=-1)
         return (
-            target,
-            observed_mask,
-            sample_id,
-            time_id,
-            variate_id,
-            prediction_mask,
+            target,           # (bs, P_past + P_future, patch_size)
+            observed_mask,    # (bs, P_past + P_future, patch_size), Boolean
+            sample_id,        # (bs, P_past + P_future), 0/1
+            time_id,          # (bs, P_past + P_future)
+            variate_id,       # (bs, P_past + P_future)
+            prediction_mask,  # (bs, P_past + P_future), Boolean
         )
 
     def _format_preds(
@@ -895,10 +959,10 @@ class MoiraiForecast(L.LightningModule):
         preds = preds[..., start:end, :patch_size]
         preds = rearrange(
             preds,
-            "sample ... (dim seq) patch -> ... sample (seq patch) dim",
+            "sample ... (dim seq) patch -> ... sample (seq patch) dim",  # dim x seq = end - start
             dim=target_dim,
         )[..., : self.hparams.prediction_length, :]
-        return preds.squeeze(-1)
+        return preds.squeeze(-1)  # (batch, sample,)?
 
     def get_default_transform(self) -> Transformation:
         transform = AsNumpyArray(

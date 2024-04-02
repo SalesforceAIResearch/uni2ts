@@ -75,7 +75,7 @@ class GroupedQueryAttention(nn.Module):
         assert (num_heads % num_groups == 0) and (num_heads >= num_groups)
 
         self.num_heads = num_heads
-        self.num_groups = num_groups
+        self.num_groups = num_groups  # What is group?
         self.head_dim = dim // num_heads
         self.heads_per_group = num_heads // num_groups
         self.var_attn_bias = var_attn_bias() if var_attn_bias is not None else None
@@ -107,6 +107,10 @@ class GroupedQueryAttention(nn.Module):
         Optional[Int[torch.Tensor, "*batch #group #hpg q_len"]],
         Optional[Int[torch.Tensor, "*batch #group #hpg kv_len"]],
     ]:
+        """
+        Rearrange the dimension for ids
+        """
+
         if self.var_attn_bias is not None or self.var_qk_proj is not None:
             if query_var_id is None:
                 query_var_id = repeat(
@@ -136,6 +140,10 @@ class GroupedQueryAttention(nn.Module):
         Optional[Int[torch.Tensor, "*batch 1 1 q_len"]],
         Optional[Int[torch.Tensor, "*batch 1 1 kv_len"]],
     ]:
+        """
+        Rearrange the dimension for ids
+        """
+
         if self.time_attn_bias is not None or self.time_qk_proj is not None:
             if query_time_id is None:
                 query_time_id = repeat(
@@ -170,12 +178,20 @@ class GroupedQueryAttention(nn.Module):
         Bool[torch.Tensor, "*batch #group #hpg q_len kv_len"]
         | Float[torch.Tensor, "*batch #group #hpg q_len kv_len"]
     ]:
+        """
+        Revise the attention mask for computing attention scores.
+        Add Head-specific Binary Learnable biases based on Variate ID.
+        Masked out positions based on input attn_mask.
+        Shared is False.
+        """
+
         if attn_mask is not None:
-            attn_mask = rearrange(
+            attn_mask = rearrange(  # (bs, 1, 1, len, len)
                 attn_mask,
                 "... q_len kv_len -> ... 1 1 q_len kv_len",
             )
 
+        # Bias are float numbers for addition
         attn_bias = 0
         if self.var_attn_bias is not None:
             attn_bias = attn_bias + self.var_attn_bias(
@@ -193,6 +209,7 @@ class GroupedQueryAttention(nn.Module):
                 kv_id=kv_time_id,
             )
 
+        # Mask out some positions in bias if attn_mask is given.
         attn_mask = (
             attn_mask
             if isinstance(attn_bias, int)
@@ -216,12 +233,17 @@ class GroupedQueryAttention(nn.Module):
         Float[torch.Tensor, "*batch group hpg q_len dim"],
         Float[torch.Tensor, "*batch group hpg kv_len dim"],
     ]:
-        if self.var_qk_proj is not None:
+        """
+        RoPE. Rotate q and k based on the Time ID.
+        Shared is True.
+        """
+
+        if self.var_qk_proj is not None:  # None by default
             query, key = self.var_qk_proj(
                 query, key, query_id=query_var_id, kv_id=kv_var_id
             )
 
-        if self.time_qk_proj is not None:
+        if self.time_qk_proj is not None:  # Only project qk based on time_id
             query, key = self.time_qk_proj(
                 query, key, query_id=query_time_id, kv_id=kv_time_id
             )
@@ -233,17 +255,17 @@ class GroupedQueryAttention(nn.Module):
         query: Float[torch.Tensor, "*batch q_len dim"],
         key: Float[torch.Tensor, "*batch kv_len dim"],
         value: Float[torch.Tensor, "*batch kv_len dim"],
-        attn_mask: Optional[Bool[torch.Tensor, "*batch q_len kv_len"]] = None,
+        attn_mask: Optional[Bool[torch.Tensor, "*batch q_len kv_len"]] = None,  # How to obtain the input attn_mask?
         query_var_id: Optional[Int[torch.Tensor, "*batch q_len"]] = None,
         kv_var_id: Optional[Int[torch.Tensor, "*batch kv_len"]] = None,
         query_time_id: Optional[Int[torch.Tensor, "*batch q_len"]] = None,
         kv_time_id: Optional[Int[torch.Tensor, "*batch kv_len"]] = None,
     ) -> Float[torch.Tensor, "*batch q_len dim"]:
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
+        query = self.q_proj(query)  # (bs, len, dim)
+        key = self.k_proj(key)      # (bs, len, dim // num_heads * num_group)
+        value = self.v_proj(value)  # (bs, len, dim // num_heads * num_group)
 
-        query = self.q_norm(
+        query = self.q_norm(  # (bs, num_groups, hpg, len, head_dim)
             rearrange(
                 query,
                 "... q_len (group hpg dim) -> ... group hpg q_len dim",
@@ -251,7 +273,7 @@ class GroupedQueryAttention(nn.Module):
                 hpg=self.heads_per_group,
             )
         )
-        key = self.k_norm(
+        key = self.k_norm(  # (bs, num_groups, hpg, len, head_dim)  Repeat hpg times
             repeat(
                 key,
                 "... kv_len (group dim) -> ... group hpg kv_len dim",
@@ -266,6 +288,7 @@ class GroupedQueryAttention(nn.Module):
             hpg=self.heads_per_group,
         )
 
+        # The following ids are (bs, 1, 1, len)
         query_var_id, kv_var_id = self._get_var_id(query, key, query_var_id, kv_var_id)
         query_time_id, kv_time_id = self._get_time_id(
             query,
@@ -274,6 +297,8 @@ class GroupedQueryAttention(nn.Module):
             kv_time_id,
         )
 
+        # attn_mask is a float mask that is added to the attention score.
+        # Same as paper, current version only uses var_ids (binary additive bias). Time ids are None.
         attn_mask = self._update_attn_mask(
             attn_mask,
             query,

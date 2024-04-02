@@ -67,7 +67,7 @@ class RelativeAttentionBias(AttentionBias):
 class BinaryAttentionBias(AttentionBias):
     def __init__(self, dim: int, num_heads: int, num_groups: int):
         super().__init__(dim, num_heads, num_groups)
-        self.emb = nn.Embedding(num_embeddings=2, embedding_dim=self.num_heads)
+        self.emb = nn.Embedding(num_embeddings=2, embedding_dim=self.num_heads)  # 2 learnable scalars for each head
 
     def forward(
         self,
@@ -76,8 +76,10 @@ class BinaryAttentionBias(AttentionBias):
         query_id: Int[torch.Tensor, "*batch 1 1 q_len"],
         kv_id: Int[torch.Tensor, "*batch 1 1 kv_len"],
     ) -> Float[torch.Tensor, "*batch #group #hpg q_len kv_len"]:
-        ind = torch.eq(query_id.unsqueeze(-1), kv_id.unsqueeze(-2))
-        weight = rearrange(self.emb.weight, "two num_heads -> two num_heads 1 1")
+        ind = torch.eq(query_id.unsqueeze(-1), kv_id.unsqueeze(-2))  # (bs, 1, 1, len, len)
+        weight = rearrange(self.emb.weight, "two num_heads -> two num_heads 1 1")  # (2, n_head, 1, 1)
+
+        # (bs, 1, n_heads, len, len)  --> (bs, group, hpg, len, len)
         bias = rearrange(  # try to avoid advanced indexing
             ~ind * weight[:1] + ind * weight[1:],
             "... 1 (group hpg) q_len kv_len -> ... group hpg q_len kv_len",

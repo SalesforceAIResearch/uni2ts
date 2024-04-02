@@ -29,7 +29,7 @@ from uni2ts.eval_util.evaluation import evaluate_model
 
 @hydra.main(version_base="1.3", config_path="conf/eval", config_name="default")
 def main(cfg: DictConfig):
-    test_data, metadata = call(cfg.data)
+    test_data, metadata = call(cfg.data)  # Why call a data name can produce data and meta_data?
     batch_size = cfg.batch_size
     while True:
         model = call(cfg.load_from_checkpoint)(
@@ -56,6 +56,8 @@ def main(cfg: DictConfig):
             )
             print(res)
             output_dir = HydraConfig.get().runtime.output_dir
+
+            # How to check the log files?
             writer = SummaryWriter(
                 log_dir=os.path.join(
                     output_dir,

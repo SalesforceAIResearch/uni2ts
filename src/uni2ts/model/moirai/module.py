@@ -55,6 +55,7 @@ class MoiraiModule(nn.Module):
         self.max_seq_len = max_seq_len
         self.scaling = scaling
 
+        # how does this mask_encoding get learned?
         self.mask_encoding = nn.Embedding(num_embeddings=1, embedding_dim=d_model)
         self.scaler = PackedStdScaler() if scaling else PackedNOPScaler()
         self.in_proj = MultiInSizeLinear(
@@ -72,7 +73,7 @@ class MoiraiModule(nn.Module):
             activation=F.silu,
             use_glu=True,
             use_qk_norm=True,
-            var_attn_bias_layer=partial(BinaryAttentionBias),
+            var_attn_bias_layer=partial(BinaryAttentionBias),  # Variate only
             time_qk_proj_layer=partial(
                 QueryKeyProjection,
                 proj_layer=RotaryProjection,
@@ -80,7 +81,7 @@ class MoiraiModule(nn.Module):
                 partial_factor=(0.0, 0.5),
             ),
             shared_var_attn_bias=False,
-            shared_time_qk_proj=True,
+            shared_time_qk_proj=True,  # Shared
             d_ff=None,
         )
         self.distr_output = distr_output
@@ -88,22 +89,33 @@ class MoiraiModule(nn.Module):
 
     def forward(
         self,
-        target: Float[torch.Tensor, "*batch seq_len max_patch"],
-        observed_mask: Bool[torch.Tensor, "*batch seq_len max_patch"],
-        sample_id: Int[torch.Tensor, "*batch seq_len"],
-        time_id: Int[torch.Tensor, "*batch seq_len"],
-        variate_id: Int[torch.Tensor, "*batch seq_len"],
-        prediction_mask: Bool[torch.Tensor, "*batch seq_len"],
+        target: Float[torch.Tensor, "*batch seq_len max_patch"],        # (bs, P_past + P_future, patch_size)
+        observed_mask: Bool[torch.Tensor, "*batch seq_len max_patch"],  # (bs, P_past + P_future, patch_size)
+        sample_id: Int[torch.Tensor, "*batch seq_len"],                 # (bs, P_past + P_future), 0/1
+        time_id: Int[torch.Tensor, "*batch seq_len"],                   # (bs, P_past + P_future)
+        variate_id: Int[torch.Tensor, "*batch seq_len"],                # (bs, P_past + P_future)
+        prediction_mask: Bool[torch.Tensor, "*batch seq_len"],          # (bs, P_past + P_future)
         patch_size: Int[torch.Tensor, "*batch seq_len"],
     ) -> Distribution:
+
+        # loc, scale are (bs, P_past + P_future, 1). The location and scale for that patch.
+        # Patches have the same loc/scale if they are from the same variate.
+        # If patches from padding, their loc/scale are zeros.
         loc, scale = self.scaler(
             target,
-            observed_mask * ~prediction_mask.unsqueeze(-1),
+            observed_mask * ~prediction_mask.unsqueeze(-1),  # Observed and not in prediction range
             sample_id,
             variate_id,
         )
         scaled_target = (target - loc) / scale
+
+        # Project TS patches into representation, use the corresponding projection layer based on patch_size
+        # (bs, P, d_model)
         reprs = self.in_proj(scaled_target, patch_size)
+
+        # ToDo: Integrate LLM's aligned embeddings here
+
+        # Replace prediction patches with mask encoding
         masked_reprs = mask_fill(reprs, prediction_mask, self.mask_encoding.weight)
         reprs = self.encoder(
             masked_reprs,

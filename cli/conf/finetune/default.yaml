@@ -37,6 +37,7 @@ trainer:
       patience: 3
       mode: min
       strict: false
+      verbose: True
   max_epochs: 100
   enable_progress_bar: true
   accumulate_grad_batches: 1

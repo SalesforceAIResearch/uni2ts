@@ -119,6 +119,7 @@ class TransformerEncoder(nn.Module):
         num_heads = num_heads or d_model // 64
         num_groups = num_groups or num_heads  # defaults to mha
 
+        # If shared, only 1 instance is created and shared in the module.
         var_attn_bias = self.get_layer(
             d_model,
             num_heads,
@@ -140,6 +141,8 @@ class TransformerEncoder(nn.Module):
             d_model, num_heads, num_groups, time_qk_proj_layer, shared_time_qk_proj
         )
 
+        # Using partial: facilitate the initialization of multiple layers with same config.
+        # Also allows to handle 'shared_layer'
         get_self_attn = partial(
             GroupedQueryAttention,
             dim=d_model,
@@ -190,9 +193,9 @@ class TransformerEncoder(nn.Module):
     ) -> Optional[Callable[[], nn.Module]]:
         if layer is None:
             return None
-        if shared_layer:
+        if shared_layer:  # Creates a single layer instance.
             module = layer(dim=dim, num_heads=num_heads, num_groups=num_groups)
-            return lambda: module
+            return lambda: module  # Lambada: always return the same instance. --> layer is shared
         return partial(layer, dim=dim, num_heads=num_heads, num_groups=num_groups)
 
     def forward(

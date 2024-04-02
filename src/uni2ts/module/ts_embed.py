@@ -46,6 +46,8 @@ class MultiInSizeLinear(nn.Module):
         self.in_features_ls = in_features_ls
         self.out_features = out_features
 
+        # 3D weights. (num_patch_size, out_features, max_patch_size)
+        # Mask the redundant elements in weight for smaller patch sizes
         self.weight = nn.Parameter(
             torch.empty(
                 (len(in_features_ls), out_features, max(in_features_ls)), dtype=dtype
@@ -95,6 +97,9 @@ class MultiInSizeLinear(nn.Module):
         for idx, feat_size in enumerate(self.in_features_ls):
             weight = self.weight[idx] * self.mask[idx]
             bias = self.bias[idx] if self.bias is not None else 0
+
+            # Use the weight and bias of `in_feat_size` for computing
+            # Samples in a batch can use different `in_feat_size`.
             out = out + (
                 torch.eq(in_feat_size, feat_size).unsqueeze(-1)
                 * (einsum(weight, x, "out inp, ... inp -> ... out") + bias)

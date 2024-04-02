@@ -91,14 +91,18 @@ class PackedStdScaler(PackedScaler):
         Float[torch.Tensor, "*batch 1 #dim"], Float[torch.Tensor, "*batch 1 #dim"]
     ]:
         id_mask = torch.logical_and(
+            # (bs, seq_len, sen_len). If i and j has the same value, then Ture
             torch.eq(sample_id.unsqueeze(-1), sample_id.unsqueeze(-2)),
             torch.eq(dimension_id.unsqueeze(-1), dimension_id.unsqueeze(-2)),
         )
+
+        # Total number of observations  (bs, P, 1)
         tobs = reduce(
             id_mask * reduce(observed_mask, "... seq dim -> ... 1 seq", "sum"),
             "... seq1 seq2 -> ... seq1 1",
             "sum",
         )
+
         loc = reduce(
             id_mask * reduce(target * observed_mask, "... seq dim -> ... 1 seq", "sum"),
             "... seq1 seq2 -> ... seq1 1",

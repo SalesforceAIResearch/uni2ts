@@ -163,7 +163,7 @@ class QueryKeyProjection(nn.Module):
             num_groups=num_groups,
             **(kwargs or {}),
         )
-        if key_proj_layer is None:
+        if key_proj_layer is None:  # Same as query
             self.key_proj = self.query_proj
         else:
             self.key_proj = key_proj_layer(
@@ -199,6 +199,8 @@ class QueryKeyProjection(nn.Module):
         Float[torch.Tensor, "*batch group hpg seq dim"],
         Float[torch.Tensor, "*batch group hpg seq dim"],
     ]:
+        # Split query/key into segments. Apply projections to the central segment (as determined by partial_factor)
+        # Then concatenate the segments back together.
         if self.partial_factor is not None:
             queries = list(query.split(self.split_sizes, dim=-1))
             keys = list(key.split(self.split_sizes, dim=-1))
