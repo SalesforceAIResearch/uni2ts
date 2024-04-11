@@ -16,7 +16,7 @@
 import math
 from contextlib import contextmanager
 from copy import deepcopy
-from typing import Any, Optional
+from typing import Any, Generator, Optional
 
 import lightning as L
 import numpy as np
@@ -96,7 +96,7 @@ class MoiraiForecast(L.LightningModule):
         context_length: Optional[int] = None,
         patch_size: Optional[int | str] = None,
         num_samples: Optional[int] = None,
-    ):
+    ) -> Generator["MoiraiForecast", None, None]:
         kwargs = {
             "prediction_length": prediction_length,
             "target_dim": target_dim,
