@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 from collections.abc import Callable
+from typing import Any
 
 from hydra.utils import get_class
 from omegaconf import OmegaConf
@@ -33,7 +34,9 @@ def resolve_as_tuple(ls: list) -> tuple:
 
 
 @register_resolver("cls_getattr")
-def resolve_cls_getattr(cls_name: str, attribute_name: str) -> list[str]:
+def resolve_cls_getattr(cls_name: str, attribute_name: str) -> Any:
+    if cls_name.endswith(".load_from_checkpoint"):
+        cls_name = cls_name[: -len(".load_from_checkpoint")]
     cls = get_class(cls_name)
     return getattr(cls, attribute_name)
 

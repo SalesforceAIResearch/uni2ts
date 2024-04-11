@@ -14,8 +14,11 @@
 #  limitations under the License.
 
 import abc
+from typing import Any, Callable
 
 from torch.utils.data import ConcatDataset, Dataset
+
+from uni2ts.transform import Transformation
 
 
 # TODO: Add __repr__
@@ -24,7 +27,9 @@ class DatasetBuilder(abc.ABC):
     def build_dataset(self, *args, **kwargs): ...
 
     @abc.abstractmethod
-    def load_dataset(self, *args, **kwargs) -> Dataset: ...
+    def load_dataset(
+        self, transform_map: dict[Any, Callable[..., Transformation]]
+    ) -> Dataset: ...
 
 
 class ConcatDatasetBuilder(DatasetBuilder):
@@ -41,7 +46,9 @@ class ConcatDatasetBuilder(DatasetBuilder):
             "Do not use ConcatBuilder to build datasets, build sub datasets individually instead."
         )
 
-    def load_dataset(self, *args, **kwargs) -> ConcatDataset:
+    def load_dataset(
+        self, transform_map: dict[Any, Callable[..., Transformation]]
+    ) -> ConcatDataset:
         return ConcatDataset(
-            [builder.load_dataset(*args, **kwargs) for builder in self.builders]
+            [builder.load_dataset(transform_map) for builder in self.builders]
         )

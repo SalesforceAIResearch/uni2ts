@@ -89,7 +89,7 @@ def test_moirai_pretrain(
     )
     patch_size = torch.ones(batch_size, max_seq_len, dtype=torch.long) * 16
 
-    prediction = model(
+    distr = model(
         target,
         observed_mask,
         sample_id,
@@ -98,19 +98,19 @@ def test_moirai_pretrain(
         prediction_mask,
         patch_size,
     )
-    loss = model.loss(
-        target,
-        observed_mask,
-        sample_id,
-        time_id,
-        variate_id,
-        prediction_mask,
-        patch_size,
+    prediction = distr.sample((model.hparams.num_samples,))
+    loss = model.hparams.loss_func(
+        pred=distr,
+        target=target,
+        prediction_mask=prediction_mask,
+        observed_mask=observed_mask,
+        sample_id=sample_id,
+        variate_id=variate_id,
     )
 
     assert prediction.shape == (
-        batch_size,
         model.hparams.num_samples,
+        batch_size,
         max_seq_len,
         max(patch_sizes),
     )
@@ -161,8 +161,8 @@ def test_moirai_transform_map(
         num_training_steps=10,
         num_warmup_steps=1,
     )
-    transform_map = model.create_transform_map()
-    transform = transform_map["default"]
+    transform_map = model.train_transform_map
+    transform = transform_map["default"]()
 
     data_entry = create_data_entry(
         length=length,

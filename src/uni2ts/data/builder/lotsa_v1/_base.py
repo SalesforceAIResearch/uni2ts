@@ -52,7 +52,9 @@ class LOTSADatasetBuilder(DatasetBuilder, abc.ABC):
         self.sample_time_series = sample_time_series
         self.storage_path = storage_path
 
-    def load_dataset(self, transform_map: dict[str | type, Transformation]) -> Dataset:
+    def load_dataset(
+        self, transform_map: dict[str | type, Callable[..., Transformation]]
+    ) -> Dataset:
         datasets = [
             self.dataset_load_func_map[dataset](
                 HuggingFaceDatasetIndexer(
@@ -67,7 +69,9 @@ class LOTSADatasetBuilder(DatasetBuilder, abc.ABC):
         return datasets[0] if len(datasets) == 1 else ConcatDataset(datasets)
 
     def _get_transform(
-        self, transform_map: dict[str | type, Transformation], dataset: str
+        self,
+        transform_map: dict[str | type, Callable[..., Transformation]],
+        dataset: str,
     ) -> Transformation:
         if dataset in transform_map:
             transform = transform_map[dataset]
@@ -77,5 +81,5 @@ class LOTSADatasetBuilder(DatasetBuilder, abc.ABC):
             try:  # defaultdict
                 transform = transform_map[dataset]
             except KeyError:
-                transform = transform_map.get("default", Identity())
-        return transform
+                transform = transform_map.get("default", Identity)
+        return transform()

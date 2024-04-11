@@ -1,0 +1,16 @@
+- _target_: uni2ts.data.builder.simple.SimpleEvalDatasetBuilder
+  dataset: ETTh1_eval
+  offset: 11520
+  windows: 10
+  distance: 96
+  prediction_length: 96
+  context_length: 1000
+  patch_size: 32
+- _target_: uni2ts.data.builder.simple.SimpleEvalDatasetBuilder
+  dataset: ETTh1_eval
+  offset: 11520
+  windows: 10
+  distance: 192
+  prediction_length: 192
+  context_length: 1000
+  patch_size: 32
