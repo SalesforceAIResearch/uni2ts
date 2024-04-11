@@ -57,6 +57,7 @@ Uni2TS relies on GluonTS for inference as it provides many convenience functions
 
 ```python
 import torch
+import matplotlib.pyplot as plt
 import pandas as pd
 from gluonts.dataset.pandas import PandasDataset
 from gluonts.dataset.split import split
@@ -129,6 +130,7 @@ plot_single(
     name="pred",
     show_label=True,
 )
+plt.show()
 ```
 
 ## 📔 Jupyter Notebook Examples
