@@ -52,7 +52,7 @@ class PackedPointNormalizedLoss(PackedPointLoss, abc.ABC):
         epsilon: float = 1e-5,
     ):
         super().__init__()
-        self.normalize = normalize
+        self.normalize = PointNormType(normalize)
         self.correction = correction
         self.epsilon = epsilon
 
