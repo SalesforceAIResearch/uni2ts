@@ -28,6 +28,11 @@ class Transformation(abc.ABC):
     def __add__(self, other: "Transformation") -> "Chain":
         return self.chain(other)
 
+    def __radd__(self, other):
+        if other == 0:
+            return self
+        return other + self
+
 
 @dataclass
 class Chain(Transformation):
