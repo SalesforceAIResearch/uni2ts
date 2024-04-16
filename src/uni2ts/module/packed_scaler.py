@@ -29,7 +29,7 @@ class PackedScaler(nn.Module):
         target: Float[torch.Tensor, "*batch seq_len #dim"],
         observed_mask: Bool[torch.Tensor, "*batch seq_len #dim"] = None,
         sample_id: Int[torch.Tensor, "*batch seq_len"] = None,
-        dimension_id: Optional[Int[torch.Tensor, "*batch seq_len"]] = None,
+        variate_id: Optional[Int[torch.Tensor, "*batch seq_len"]] = None,
     ):
         if observed_mask is None:
             observed_mask = torch.ones_like(target, dtype=torch.bool)
@@ -37,13 +37,13 @@ class PackedScaler(nn.Module):
             sample_id = torch.zeros(
                 target.shape[:-1], dtype=torch.long, device=target.device
             )
-        if dimension_id is None:
-            dimension_id = torch.zeros(
+        if variate_id is None:
+            variate_id = torch.zeros(
                 target.shape[:-1], dtype=torch.long, device=target.device
             )
 
         loc, scale = self._get_loc_scale(
-            target.double(), observed_mask, sample_id, dimension_id
+            target.double(), observed_mask, sample_id, variate_id
         )
         return loc.float(), scale.float()
 
@@ -52,7 +52,7 @@ class PackedScaler(nn.Module):
         target: Float[torch.Tensor, "*batch seq_len #dim"],
         observed_mask: Bool[torch.Tensor, "*batch seq_len #dim"],
         sample_id: Int[torch.Tensor, "*batch seq_len"],
-        dimension_id: Int[torch.Tensor, "*batch seq_len"],
+        variate_id: Int[torch.Tensor, "*batch seq_len"],
     ) -> tuple[
         Float[torch.Tensor, "*batch seq_len #dim"],
         Float[torch.Tensor, "*batch seq_len #dim"],
@@ -66,7 +66,7 @@ class PackedNOPScaler(PackedScaler):
         target: Float[torch.Tensor, "*batch seq_len #dim"],
         observed_mask: Bool[torch.Tensor, "*batch seq_len #dim"],
         sample_id: Int[torch.Tensor, "*batch seq_len"],
-        dimension_id: Int[torch.Tensor, "*batch seq_len"],
+        variate_id: Int[torch.Tensor, "*batch seq_len"],
     ) -> tuple[
         Float[torch.Tensor, "*batch 1 #dim"], Float[torch.Tensor, "*batch 1 #dim"]
     ]:
@@ -86,13 +86,13 @@ class PackedStdScaler(PackedScaler):
         target: Float[torch.Tensor, "*batch seq_len #dim"],
         observed_mask: Bool[torch.Tensor, "*batch seq_len #dim"],
         sample_id: Int[torch.Tensor, "*batch seq_len"],
-        dimension_id: Int[torch.Tensor, "*batch seq_len"],
+        variate_id: Int[torch.Tensor, "*batch seq_len"],
     ) -> tuple[
         Float[torch.Tensor, "*batch 1 #dim"], Float[torch.Tensor, "*batch 1 #dim"]
     ]:
         id_mask = torch.logical_and(
             torch.eq(sample_id.unsqueeze(-1), sample_id.unsqueeze(-2)),
-            torch.eq(dimension_id.unsqueeze(-1), dimension_id.unsqueeze(-2)),
+            torch.eq(variate_id.unsqueeze(-1), variate_id.unsqueeze(-2)),
         )
         tobs = reduce(
             id_mask * reduce(observed_mask, "... seq dim -> ... 1 seq", "sum"),
@@ -128,13 +128,13 @@ class PackedAbsMeanScaler(PackedScaler):
         target: Float[torch.Tensor, "*batch seq_len #dim"],
         observed_mask: Bool[torch.Tensor, "*batch seq_len #dim"],
         sample_id: Int[torch.Tensor, "*batch seq_len"],
-        dimension_id: Int[torch.Tensor, "*batch seq_len"],
+        variate_id: Int[torch.Tensor, "*batch seq_len"],
     ) -> tuple[
         Float[torch.Tensor, "*batch 1 #dim"], Float[torch.Tensor, "*batch 1 #dim"]
     ]:
         id_mask = torch.logical_and(
             torch.eq(sample_id.unsqueeze(-1), sample_id.unsqueeze(-2)),
-            torch.eq(dimension_id.unsqueeze(-1), dimension_id.unsqueeze(-2)),
+            torch.eq(variate_id.unsqueeze(-1), variate_id.unsqueeze(-2)),
         )
         tobs = reduce(
             id_mask * reduce(observed_mask, "... seq dim -> ... 1 seq", "sum"),
