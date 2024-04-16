@@ -301,3 +301,79 @@ def test_moirai_forecast_auto(
             prediction_length,
             target_dim,
         )
+
+
+@pytest.mark.parametrize("batch_size", [1, 3])
+@pytest.mark.parametrize("context_length", [101, 152, 203])
+@pytest.mark.parametrize("prediction_length", [20])
+@pytest.mark.parametrize(
+    "target_dim, feat_dynamic_real_dim, past_feat_dynamic_real_dim",
+    [
+        (1, 0, 0),
+        (2, 0, 0),
+        (1, 1, 0),
+        (2, 2, 0),
+        (1, 1, 1),
+        (2, 2, 2),
+    ],
+)
+@pytest.mark.parametrize("patch_size", [2, 4, 8])
+def test_moirai_forecast_hparams_context(
+    batch_size: int,
+    context_length: int,
+    prediction_length: int,
+    target_dim: int,
+    feat_dynamic_real_dim: int,
+    past_feat_dynamic_real_dim: int,
+    patch_size: int,
+    num_samples: int = 2,
+):
+    model = MoiraiForecast(
+        module_kwargs=dict(
+            distr_output=StudentTOutput(),
+            d_model=128,
+            num_layers=2,
+            patch_sizes=(2, 4, 8),
+            max_seq_len=128,
+            attn_dropout_p=0.0,
+            dropout_p=0.0,
+            scaling=True,
+        ),
+        context_length=999,
+        prediction_length=999,
+        target_dim=999,
+        feat_dynamic_real_dim=999,
+        past_feat_dynamic_real_dim=999,
+        patch_size=999,
+        num_samples=999,
+    )
+
+    with model.hparams_context(
+        prediction_length=prediction_length,
+        target_dim=target_dim,
+        feat_dynamic_real_dim=feat_dynamic_real_dim,
+        past_feat_dynamic_real_dim=past_feat_dynamic_real_dim,
+        context_length=context_length,
+        patch_size=patch_size,
+        num_samples=num_samples,
+    ) as model:
+        inputs = model.describe_inputs(batch_size).zeros()
+        inputs["past_observed_target"] = torch.ones_like(inputs["past_observed_target"])
+        prediction = model(**inputs)
+        if target_dim == 1:
+            assert prediction.shape == (batch_size, num_samples, prediction_length)
+        else:
+            assert prediction.shape == (
+                batch_size,
+                num_samples,
+                prediction_length,
+                target_dim,
+            )
+
+    assert model.hparams.prediction_length == 999
+    assert model.hparams.target_dim == 999
+    assert model.hparams.feat_dynamic_real_dim == 999
+    assert model.hparams.past_feat_dynamic_real_dim == 999
+    assert model.hparams.context_length == 999
+    assert model.hparams.patch_size == 999
+    assert model.hparams.num_samples == 999

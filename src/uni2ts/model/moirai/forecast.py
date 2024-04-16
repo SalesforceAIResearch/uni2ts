@@ -14,7 +14,9 @@
 #  limitations under the License.
 
 import math
-from typing import Any, Optional
+from contextlib import contextmanager
+from copy import deepcopy
+from typing import Any, Generator, Optional
 
 import lightning as L
 import numpy as np
@@ -39,7 +41,7 @@ from uni2ts.loss.packed import PackedNLLLoss as _PackedNLLLoss
 from .module import MoiraiModule
 
 
-class PackedNLLLoss(_PackedNLLLoss):
+class SampleNLLLoss(_PackedNLLLoss):
     def reduce_loss(
         self,
         loss: Float[torch.Tensor, "batch seq_len #dim"],
@@ -47,7 +49,7 @@ class PackedNLLLoss(_PackedNLLLoss):
         observed_mask: Optional[Bool[torch.Tensor, "batch seq_len #dim"]],
         sample_id: Optional[Int[torch.Tensor, "batch seq_len"]],
         variate_id: Optional[Int[torch.Tensor, "batch seq_len"]],
-    ) -> Float[torch.Tensor, ""]:
+    ) -> Float[torch.Tensor, "batch"]:
         id_mask = torch.logical_and(
             torch.eq(sample_id.unsqueeze(-1), sample_id.unsqueeze(-2)),
             torch.eq(variate_id.unsqueeze(-1), variate_id.unsqueeze(-2)),
@@ -82,7 +84,37 @@ class MoiraiForecast(L.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.module = MoiraiModule(**module_kwargs)
-        self.per_sample_loss_func = PackedNLLLoss()
+        self.per_sample_loss_func = SampleNLLLoss()
+
+    @contextmanager
+    def hparams_context(
+        self,
+        prediction_length: Optional[int] = None,
+        target_dim: Optional[int] = None,
+        feat_dynamic_real_dim: Optional[int] = None,
+        past_feat_dynamic_real_dim: Optional[int] = None,
+        context_length: Optional[int] = None,
+        patch_size: Optional[int | str] = None,
+        num_samples: Optional[int] = None,
+    ) -> Generator["MoiraiForecast", None, None]:
+        kwargs = {
+            "prediction_length": prediction_length,
+            "target_dim": target_dim,
+            "feat_dynamic_real_dim": feat_dynamic_real_dim,
+            "past_feat_dynamic_real_dim": past_feat_dynamic_real_dim,
+            "context_length": context_length,
+            "patch_size": patch_size,
+            "num_samples": num_samples,
+        }
+        old_hparams = deepcopy(self.hparams)
+        for kw, arg in kwargs.items():
+            if arg is not None:
+                self.hparams[kw] = arg
+
+        yield self
+
+        for kw in kwargs:
+            self.hparams[kw] = old_hparams[kw]
 
     def create_predictor(
         self,
