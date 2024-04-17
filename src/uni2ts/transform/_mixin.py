@@ -20,6 +20,9 @@ import numpy as np
 
 
 class MapFuncMixin:
+    """
+    Map the function to the given fields in data entry
+    """
     @staticmethod
     def map_func(
         func: Callable[[dict[str, Any], str], Any],

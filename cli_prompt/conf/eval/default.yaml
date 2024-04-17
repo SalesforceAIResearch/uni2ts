@@ -1,0 +1,24 @@
+hydra:
+  run:
+    dir: outputs/${hydra:job.name}/${hydra:runtime.choices.data}/${data.dataset_name}/${data.mode}/prediction_length=${data.prediction_length}/${run_name}
+defaults:
+  - model: ???
+  - data: ???
+  - _self_
+run_name: ???
+metrics:
+  - _target_: gluonts.ev.metrics.MSE
+  - _target_: uni2ts.eval_util.metrics.MedianMSE
+  - _target_: gluonts.ev.metrics.MAE
+  - _target_: gluonts.ev.metrics.MASE
+  - _target_: gluonts.ev.metrics.MAPE
+  - _target_: gluonts.ev.metrics.SMAPE
+  - _target_: gluonts.ev.metrics.MSIS
+  - _target_: gluonts.ev.metrics.RMSE
+  - _target_: gluonts.ev.metrics.NRMSE
+  - _target_: gluonts.ev.metrics.ND
+  - _target_: gluonts.ev.metrics.MeanWeightedSumQuantileLoss
+    quantile_levels: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+batch_size: 512
+min_batch_size: 16
+device: auto

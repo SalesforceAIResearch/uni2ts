@@ -27,7 +27,7 @@ from uni2ts.eval_util.evaluation import evaluate_model
 
 @hydra.main(version_base="1.3", config_path="conf/eval", config_name="default")
 def main(cfg: DictConfig):
-    test_data, metadata = call(cfg.data)
+    test_data, metadata = call(cfg.data)  # Why call a data name can produce data and meta_data?
     batch_size = cfg.batch_size
     while True:
         model = call(cfg.model, _partial_=True)(

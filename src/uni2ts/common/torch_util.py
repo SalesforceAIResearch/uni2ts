@@ -38,7 +38,7 @@ def packed_attention_mask(
     sample_id: Int[torch.Tensor, "*batch seq_len"]
 ) -> Bool[torch.Tensor, "*batch seq_len seq_len"]:
     sample_id = sample_id.unsqueeze(-1)
-    attention_mask = sample_id.eq(sample_id.mT)
+    attention_mask = sample_id.eq(sample_id.mT)  # Returns a view of this tensor with the last two dimensions transposed.
     return attention_mask
 
 

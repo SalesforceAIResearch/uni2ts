@@ -1,0 +1,7 @@
+_target_: uni2ts.eval_util.data.get_custom_eval_dataset
+dataset_name: ETTh1_eval
+offset: 14400
+windows: 2785
+distance: 1
+prediction_length: 96
+mode: null

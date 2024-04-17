@@ -101,15 +101,14 @@ def main(cfg: DictConfig):
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
 
-    # Methods to initiate objects in hydra:
-    # https://hydra.cc/docs/advanced/instantiate_objects/overview/
-    # `get_class`: Look up a class based on a dotpath.
-    # `instantiate` for creating objects and `call` for invoking functions
     model: L.LightningModule = get_class(cfg.model._target_).load_from_checkpoint(
-        **call(cfg.model._args_, _convert_="all"),
+        **call(cfg.model._args_, _convert_="all"), data=cfg.data.dataset
     )
+
+    model.init_after_loading_moirai()
+
     if cfg.compile:
-        model.module.compile(mode=cfg.compile)
+        model.module.compile(mode=cfg.compile)  # Don't know where to use it...
     trainer: L.Trainer = instantiate(cfg.trainer)
 
     # cfg.data: use the corresponding yaml in data folder based on the passed data name.

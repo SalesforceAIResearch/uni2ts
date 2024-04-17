@@ -156,6 +156,10 @@ class SimpleDatasetBuilder(DatasetBuilder):
         hf_dataset.save_to_disk(self.storage_path / self.dataset)
 
     def load_dataset(self, transform: Transformation = Identity(), *args) -> Dataset:
+        """
+        Apply uni2ts transformation to dataset
+        """
+
         return TimeSeriesDataset(
             HuggingFaceDatasetIndexer(
                 datasets.load_from_disk(

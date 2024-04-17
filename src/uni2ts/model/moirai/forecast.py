@@ -230,6 +230,10 @@ class MoiraiForecast(L.LightningModule):
         ] = None,
         num_samples: Optional[int] = None,
     ) -> Float[torch.Tensor, "batch sample future_time *tgt"]:
+        """
+        Get called in PytorchPredictor's predict_to_numpy.
+        """
+
         if self.hparams.patch_size == "auto":
             val_loss = []
             preds = []
@@ -369,6 +373,7 @@ class MoiraiForecast(L.LightningModule):
             past_feat_dynamic_real=past_feat_dynamic_real,
             past_observed_feat_dynamic_real=past_observed_feat_dynamic_real,
         )
+
         # get predictions
         distr = self.module(
             target,
@@ -518,11 +523,6 @@ class MoiraiForecast(L.LightningModule):
         Int[torch.Tensor, "batch combine_seq"],  # variate_id
         Bool[torch.Tensor, "batch combine_seq"],  # prediction_mask
     ]:
-        """
-
-
-
-        """
 
         batch_shape = past_target.shape[:-2]
         device = past_target.device
@@ -965,13 +965,18 @@ class MoiraiForecast(L.LightningModule):
         return preds.squeeze(-1)  # (batch, sample,)?
 
     def get_default_transform(self) -> Transformation:
+        """
+        Add GluonTS transformations.
+        """
         transform = AsNumpyArray(
             field="target",
             expected_ndim=1 if self.hparams.target_dim == 1 else 2,
             dtype=np.float32,
         )
+
         if self.hparams.target_dim == 1:
             transform += ExpandDimArray(field="target", axis=0)
+
         transform += AddObservedValuesIndicator(
             target_field="target",
             output_field="observed_target",

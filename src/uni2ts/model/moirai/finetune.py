@@ -99,6 +99,10 @@ class MoiraiFinetune(L.LightningModule):
         weight_decay: float = 1e-2,
         log_on_step: bool = False,
     ):
+        #ToDo: Why MoiriaFinetune doesn't specify context_length/prediction_length/patch_size? How to decide during training?
+        # It seems there is no prediction_length, only randomly mask some fraction of patches?
+        # patch_size is selected based on the frequency of TS
+
         assert (
             num_warmup_steps <= num_training_steps
         ), f"num_warmup_steps ({num_warmup_steps}) should be <= num_training_steps ({num_training_steps})."
@@ -108,7 +112,7 @@ class MoiraiFinetune(L.LightningModule):
 
     def forward(
         self,
-        target: Float[torch.Tensor, "*batch seq_len max_patch"],
+        target: Float[torch.Tensor, "*batch seq_len max_patch"],  # Why max_patch?
         observed_mask: Bool[torch.Tensor, "*batch seq_len max_patch"],
         sample_id: Int[torch.Tensor, "*batch seq_len"],
         time_id: Int[torch.Tensor, "*batch seq_len"],
@@ -163,6 +167,8 @@ class MoiraiFinetune(L.LightningModule):
     ) -> torch.Tensor:
         # `**` unpacks a dict's items: each key-value pair is passed as a kwarg to the function
         loss = self.loss(**batch)
+
+        # Why compute batch_szie like this?
         batch_size = (
             batch["sample_id"].max(dim=1).values.sum() if "sample_id" in batch else None
         )
@@ -291,6 +297,7 @@ class MoiraiFinetune(L.LightningModule):
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
             )
+            # add a new field of "patch_size" to data dict, randomly choose from range based on frequency
             + GetPatchSize(
                 min_time_patches=self.hparams.min_patches,
                 target_field="target",
@@ -298,6 +305,7 @@ class MoiraiFinetune(L.LightningModule):
                 patch_size_constraints=DefaultPatchSizeConstraints(),
                 offset=True,
             )
+            # Crop fields in a data_entry in the temporal dimension based on a patch_size.
             + PatchCrop(
                 min_time_patches=self.hparams.min_patches,
                 max_patches=self.module.max_seq_len,
@@ -315,22 +323,26 @@ class MoiraiFinetune(L.LightningModule):
                 fields=tuple(),
                 optional_fields=("past_feat_dynamic_real",),
             )
+            # Add a new field 'observed_mask'. Observed or missing: nan are False.
             + AddObservedMask(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
                 observed_mask_field="observed_mask",
                 collection_type=dict,
             )
+            # Impute the nan values.
             + ImputeTimeSeries(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
                 imputation_method=DummyValueImputation(value=0.0),
             )
+            # Patching the series in fields into patches based on patch_size
             + Patchify(
                 max_patch_size=max(self.module.patch_sizes),
                 fields=("target", "observed_mask"),
                 optional_fields=("past_feat_dynamic_real",),
             )
+            # Add a new field "variate_id".
             + AddVariateIndex(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
@@ -340,6 +352,7 @@ class MoiraiFinetune(L.LightningModule):
                 randomize=True,
                 collection_type=dict,
             )
+            # Add a new field "time_id".
             + AddTimeIndex(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
@@ -347,6 +360,7 @@ class MoiraiFinetune(L.LightningModule):
                 expected_ndim=3,
                 collection_type=dict,
             )
+            # Add a new field "prediction_mask"
             + MaskedPrediction(
                 min_mask_ratio=self.hparams.min_mask_ratio,
                 max_mask_ratio=self.hparams.max_mask_ratio,
@@ -356,6 +370,7 @@ class MoiraiFinetune(L.LightningModule):
                 prediction_mask_field="prediction_mask",
                 expected_ndim=3,
             )
+            # Extend prediction_mask
             + ExtendMask(
                 fields=tuple(),
                 optional_fields=("past_feat_dynamic_real",),

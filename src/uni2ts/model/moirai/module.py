@@ -73,15 +73,15 @@ class MoiraiModule(nn.Module):
             activation=F.silu,
             use_glu=True,
             use_qk_norm=True,
-            var_attn_bias_layer=partial(BinaryAttentionBias),  # Variate only
-            time_qk_proj_layer=partial(
+            var_attn_bias_layer=partial(BinaryAttentionBias),  # Binary attn bias for Variate id
+            time_qk_proj_layer=partial(  # RoPE for Time index
                 QueryKeyProjection,
                 proj_layer=RotaryProjection,
                 kwargs=dict(max_len=max_seq_len),
                 partial_factor=(0.0, 0.5),
             ),
             shared_var_attn_bias=False,
-            shared_time_qk_proj=True,  # Shared
+            shared_time_qk_proj=True,  # Shared? How?
             d_ff=None,
         )
         self.distr_output = distr_output

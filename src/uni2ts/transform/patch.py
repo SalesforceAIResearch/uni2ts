@@ -55,6 +55,9 @@ class FixedPatchSizeConstraints(PatchSizeConstraints):
 
 
 class DefaultPatchSizeConstraints(PatchSizeConstraints):
+    """
+    Appendix B.1
+    """
     # https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
     DEFAULT_RANGES = {
         "S": (64, 128),  # 512s = 8.53min, 4096s = 68.26min
