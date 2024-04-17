@@ -69,8 +69,11 @@ class PatchCrop(MapFuncMixin, Transformation):
         patch_size = data_entry["patch_size"]
         field: list[UnivarTimeSeries] = data_entry[self.fields[0]]
         time = field[0].shape[0]
-        nvar = sum(len(data_entry[f]) for f in self.fields) + sum(
-            len(data_entry[f]) for f in self.optional_fields if f in data_entry
+        nvar = (
+            sum(len(data_entry[f]) for f in self.fields)
+            + sum(len(data_entry[f]) for f in self.optional_fields if f in data_entry)
+            if self.will_flatten
+            else 1
         )
 
         offset = (
