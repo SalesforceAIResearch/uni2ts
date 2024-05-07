@@ -59,6 +59,12 @@ python -m cli.train \
 
 The following shell scripts can be used to reproduce the results on the Monash, Probabilistic Forecasting, and Long Sequence Forecasting settings as presented in the paper.
 
+To run the probabilistic forecasting and long sequence forecasting, ensrue to add the following datasets to `LSF_PATH`, add `LSF_PATH` to the `.env` file.
+* Datasets from Time-Series-Library: https://github.com/thuml/Time-Series-Library
+* Walmart: https://www.kaggle.com/competitions/walmart-recruiting-store-sales-forecasting/overview
+* Istanbul Traffic: https://www.kaggle.com/datasets/leonardo00/istanbul-traffic-index
+* Turkey Power: https://www.kaggle.com/datasets/dharanikra/electrical-power-demand-in-turkey
+
 **N.B.:** Run these commands in the base [uni2ts](../..) folder.
 
 **N.B.:** Patch size and context lengths have been tuned based on the validation sets as described in the [paper](https://arxiv.org/abs/2402.02592), we directly fix them in the following scripts based on the validation set results.
