@@ -26,17 +26,18 @@ trainer:
       logging_interval: epoch
     - _target_: lightning.pytorch.callbacks.ModelCheckpoint
       dirpath: ${hydra:runtime.output_dir}/checkpoints
-      monitor: val_loss
+      monitor: val/PackedNLLLoss
       save_weights_only: true
       mode: min
       save_top_k: 1
       every_n_epochs: 1
     - _target_: lightning.pytorch.callbacks.EarlyStopping
-      monitor: val_loss
+      monitor: val/PackedNLLLoss
       min_delta: 0.0
       patience: 3
       mode: min
       strict: false
+      verbose: true
   max_epochs: 100
   enable_progress_bar: true
   accumulate_grad_batches: 1
@@ -52,7 +53,7 @@ train_dataloader:
   num_workers: 11
   collate_fn:
     _target_: uni2ts.data.loader.PackCollate
-    max_length: ${model._args_.module_kwargs.max_seq_len}
+    max_length: ${model.module_kwargs.max_seq_len}
     seq_fields: ${cls_getattr:${model._target_},seq_fields}
     pad_func_map: ${cls_getattr:${model._target_},pad_func_map}
   pin_memory: true
@@ -71,7 +72,7 @@ val_dataloader:
   num_workers: 11
   collate_fn:
     _target_: uni2ts.data.loader.PackCollate
-    max_length: ${model._args_.module_kwargs.max_seq_len}
+    max_length: ${model.module_kwargs.max_seq_len}
     seq_fields: ${cls_getattr:${model._target_},seq_fields}
     pad_func_map: ${cls_getattr:${model._target_},pad_func_map}
   pin_memory: false

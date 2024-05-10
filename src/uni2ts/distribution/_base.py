@@ -87,14 +87,10 @@ class DistrParamProj(nn.Module):
             out_features if isinstance(out_features, int) else max(out_features)
         )
 
-    def forward(
-        self,
-        x: Float[torch.Tensor, "*batch feat"],
-        out_feat_size: Int[torch.Tensor, "*batch"],
-    ) -> PyTree[Float[torch.Tensor, "*batch out dim"], "T"]:
+    def forward(self, *args) -> PyTree[Float[torch.Tensor, "*batch out dim"], "T"]:
         params_unbounded = tree_map(
             lambda proj: rearrange(
-                proj(x, out_feat_size),
+                proj(*args),
                 "... (dim out_size) -> ... out_size dim",
                 out_size=self.out_size,
             ),
@@ -165,7 +161,7 @@ class DistributionOutput(abc.ABC):
     def get_param_proj(
         self,
         in_features: int,
-        out_features: tuple[int, ...],
+        out_features: int | tuple[int, ...],
         proj_layer: type[nn.Module] = MultiOutSizeLinear,
         **kwargs: Any,
     ) -> nn.Module:

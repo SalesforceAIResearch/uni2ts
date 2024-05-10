@@ -4,6 +4,7 @@ hydra:
 defaults:
   - model: ???
   - data: ???
+  - val_data: null
   - _self_
 run_name: ???
 seed: 0

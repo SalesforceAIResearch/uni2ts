@@ -155,14 +155,16 @@ class SimpleDatasetBuilder(DatasetBuilder):
         hf_dataset.info.dataset_name = self.dataset
         hf_dataset.save_to_disk(self.storage_path / self.dataset)
 
-    def load_dataset(self, transform: Transformation = Identity(), *args) -> Dataset:
+    def load_dataset(
+        self, transform_map: dict[str, Callable[..., Transformation]]
+    ) -> Dataset:
         return TimeSeriesDataset(
             HuggingFaceDatasetIndexer(
                 datasets.load_from_disk(
                     str(self.storage_path / self.dataset),
                 )
             ),
-            transform=transform,
+            transform=transform_map[self.dataset](),
             dataset_weight=self.weight,
             sample_time_series=self.sample_time_series,
         )
@@ -204,7 +206,7 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
         hf_dataset.save_to_disk(self.storage_path / self.dataset)
 
     def load_dataset(
-        self, get_transform: Callable[[int, int, int, int, int], Transformation]
+        self, transform_map: dict[str, Callable[..., Transformation]]
     ) -> Dataset:
         return EvalDataset(
             self.windows,
@@ -213,12 +215,12 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
                     str(self.storage_path / self.dataset),
                 )
             ),
-            transform=get_transform(
-                self.offset,
-                self.distance,
-                self.prediction_length,
-                self.context_length,
-                self.patch_size,
+            transform=transform_map[self.dataset](
+                offset=self.offset,
+                distance=self.distance,
+                prediction_length=self.prediction_length,
+                context_length=self.context_length,
+                patch_size=self.patch_size,
             ),
         )
 

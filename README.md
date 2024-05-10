@@ -166,7 +166,8 @@ python -m uni2ts.data.builder.simple ETTh1 dataset/ETT-small/ETTh1.csv --date_of
 
 3. Finally, we can simply run the fine-tuning script with the appropriate [training](cli/conf/finetune/data/etth1.yaml) and [validation](cli/conf/finetune/val_data/etth1.yaml) data configuration files.
 ```shell
-python -m cli.finetune \
+python -m cli.train \
+  -cp conf/finetune \
   run_name=example_run \ 
   model=moirai_1.0_R_small \ 
   data=etth1 \ 
@@ -177,7 +178,7 @@ python -m cli.finetune \
 
 The evaluation script can be used to calculate evaluation metrics such as MSE, MASE, CRPS, and so on (see the [configuration file](cli/conf/eval/default.yaml)). 
 
-Following up on the fine-tuning example, we can now perform evaluation on the test split by running the following script:
+Given a test split (see previous section on processing datasets), we can run the following command to evaluate it:
 ```shell
 python -m cli.eval \ 
   run_name=example_eval_1 \
@@ -217,9 +218,10 @@ echo "LOTSA_V1_PATH=PATH_TO_SAVE" >> .env
 ```
 
 Then, we can simply run the following script to start a pre-training job. 
-See the [relevant](cli/pretrain.py) [files](cli/conf/pretrain) on how to further customize the settings.
+See the [relevant](cli/train.py) [files](cli/conf/pretrain) on how to further customize the settings.
 ```shell
-python -m cli.pretrain \
+python -m cli.train \
+  -cp conf/pretrain \
   run_name=first_run \
   model=moirai_small \
   data=lotsa_v1_unweighted

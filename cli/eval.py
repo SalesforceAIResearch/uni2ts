@@ -30,7 +30,7 @@ def main(cfg: DictConfig):
     test_data, metadata = call(cfg.data)
     batch_size = cfg.batch_size
     while True:
-        model = call(cfg.model, _partial_=True)(
+        model = call(cfg.model, _partial_=True, _convert_="all")(
             prediction_length=metadata.prediction_length,
             target_dim=metadata.target_dim,
             feat_dynamic_real_dim=metadata.feat_dynamic_real_dim,
