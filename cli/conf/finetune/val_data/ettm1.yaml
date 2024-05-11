@@ -1,0 +1,13 @@
+_target_: uni2ts.data.builder.ConcatDatasetBuilder
+_args_:
+  _target_: uni2ts.data.builder.simple.generate_eval_builders
+  dataset: ETTm1_eval
+  offset: 34560  # Same as _lsf_dataset.py
+  eval_length: 11520  # Same as _lsf_dataset.py
+  prediction_lengths: [96, 192, 336, 720]
+  context_lengths: [1000, 2000, 3000, 4000, 5000]
+#  patch_sizes: [32, 64, 128]  # "15T"
+
+#  prediction_lengths: [ 96 ]
+#  context_lengths: [ 4000 ]
+  patch_sizes: [ 128 ]  # "15T"

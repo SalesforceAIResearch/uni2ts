@@ -50,8 +50,8 @@ class HuggingFaceDatasetIndexer(Indexer):
         pa_subtable = query_table(self.dataset.data, idx, indices=self.dataset._indices)
         seqs = {
             col: self._pa_column_to_numpy(pa_subtable, col)[0] for col in self.seq_cols
-        }
-        return non_seqs | seqs
+        }  # Turn sequences fields from pa to numpy
+        return non_seqs | seqs  # dict with both non_seqs and seqs fields
 
     def _getitem_iterable(self, idx: Iterable[int]) -> dict[str, BatchedData]:
         non_seqs = self.dataset[idx]

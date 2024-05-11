@@ -5,6 +5,7 @@ defaults:
   - model: ???
   - data: ???
   - val_data: null
+  - task: ???
   - _self_
 run_name: ???
 seed: 0
@@ -34,7 +35,7 @@ trainer:
     - _target_: lightning.pytorch.callbacks.EarlyStopping
       monitor: val_loss
       min_delta: 0.0
-      patience: 3
+      patience: 10
       mode: min
       strict: false
       verbose: True
@@ -46,16 +47,16 @@ trainer:
 train_dataloader:
   _target_: uni2ts.data.loader.DataLoader
   batch_size: 64
-  batch_size_factor: 2.0
+  batch_size_factor: 1.0  # 2.0
   cycle: true
-  num_batches_per_epoch: 100
+  num_batches_per_epoch: 20
   shuffle: true
-  num_workers: 11
-  collate_fn:
-    _target_: uni2ts.data.loader.PackCollate
-    max_length: ${model._args_.module_kwargs.max_seq_len}
-    seq_fields: ${cls_getattr:${model._target_},seq_fields}
-    pad_func_map: ${cls_getattr:${model._target_},pad_func_map}
+  num_workers: 11  # 11
+#  collate_fn:
+#    _target_: uni2ts.data.loader.PackCollate
+#    max_length: ${model._args_.module_kwargs.max_seq_len}
+#    seq_fields: ${cls_getattr:${model._target_},seq_fields}
+#    pad_func_map: ${cls_getattr:${model._target_},pad_func_map}
   pin_memory: true
   drop_last: false
   fill_last: false
@@ -64,20 +65,20 @@ train_dataloader:
   persistent_workers: true
 val_dataloader:
   _target_: uni2ts.data.loader.DataLoader
-  batch_size: 64
-  batch_size_factor: 2.0
+  batch_size: 128
+  batch_size_factor: 1.0  # 2.0
   cycle: false
   num_batches_per_epoch: null
   shuffle: false
-  num_workers: 11
-  collate_fn:
-    _target_: uni2ts.data.loader.PackCollate
-    max_length: ${model._args_.module_kwargs.max_seq_len}
-    seq_fields: ${cls_getattr:${model._target_},seq_fields}
-    pad_func_map: ${cls_getattr:${model._target_},pad_func_map}
+  num_workers: 11 #  11
+#  collate_fn:
+#    _target_: uni2ts.data.loader.PackCollate
+#    max_length: ${model._args_.module_kwargs.max_seq_len}
+#    seq_fields: ${cls_getattr:${model._target_},seq_fields}
+#    pad_func_map: ${cls_getattr:${model._target_},pad_func_map}
   pin_memory: false
   drop_last: false
-  fill_last: true
+  fill_last: false
   worker_init_fn: null
   prefetch_factor: 2
   persistent_workers: true

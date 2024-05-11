@@ -1,8 +1,10 @@
 _target_: uni2ts.model.moirai.MoiraiForecast.load_from_checkpoint
-checkpoint_path:
-  _target_: huggingface_hub.hf_hub_download
-  repo_id: Salesforce/moirai-1.0-R-base
-  filename: model.ckpt
+#checkpoint_path:
+#  _target_: huggingface_hub.hf_hub_download
+#  repo_id: Salesforce/moirai-1.0-R-base
+#  filename: model.ckpt
+
+checkpoint_path: /home/eee/qzz/uni2ts/outputs/finetune/moirai_1.0_R_base/etth1/my_lsf_run/checkpoints/epoch=19-step=200.ckpt
 num_samples: 100
 patch_size: ???
 context_length: ???

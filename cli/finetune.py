@@ -23,7 +23,21 @@ from omegaconf import DictConfig
 from torch.utils.data import Dataset, DistributedSampler
 
 from uni2ts.common import hydra_util  # noqa: hydra resolvers
+import sys
 
+
+# class Logger(object):
+#     def __init__(self, filename="Default.log"):
+#         self.terminal = sys.stdout
+#         self.log = open(filename, "a")
+#         self.encoding = None
+#
+#     def write(self, message):
+#         self.terminal.write(message)
+#         self.log.write(message)
+#
+#     def flush(self):
+#         pass
 
 class DataModule(L.LightningDataModule):
     def __init__(
@@ -113,16 +127,33 @@ def main(cfg: DictConfig):
     trainer: L.Trainer = instantiate(cfg.trainer)
 
     # cfg.data: use the corresponding yaml in data folder based on the passed data name.
-    # instantiate _target_ in that yaml, which is SimpleDatasetBuilder in etth1
+    # train_dataset only contains the range before offset.
     train_dataset: Dataset = instantiate(cfg.data).load_dataset(
         model.create_train_transform()  # This transform includes patching and flatten,etc
     )
+
+    # val data in disk contains the whole range of data, including train, val and test.
+    # Specify offset, eval_length, etc in yaml when loading.
+    # val_dataset is a ConcatDataset, with various config for transformation.
     val_dataset: Optional[Dataset] = (
         instantiate(cfg.val_data).load_dataset(model.create_val_transform)
         if "val_data" in cfg
         else None
     )
     L.seed_everything(cfg.seed + trainer.logger.version, workers=True)
+
+
+    # log_dir = cfg.trainer.logger.save_dir + '/' + 'log.txt'
+    # sys.stdout = Logger(log_dir)
+    #
+    # print(f'log version: {trainer.logger.version}')
+    # print(f'Training batch size: {cfg.train_dataloader.batch_size}')
+    # print(f'Num batches per epoch: {cfg.train_dataloader.num_batches_per_epoch}')
+    # print(f'lr: {cfg.model._args_.lr}')
+
+    # Qz: Check the validation loss for the initial pretrained model
+    trainer.validate(model, datamodule=DataModule(cfg, train_dataset, val_dataset))
+
     trainer.fit(
         model,
         datamodule=DataModule(cfg, train_dataset, val_dataset),

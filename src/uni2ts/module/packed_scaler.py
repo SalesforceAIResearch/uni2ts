@@ -90,13 +90,13 @@ class PackedStdScaler(PackedScaler):
     ) -> tuple[
         Float[torch.Tensor, "*batch 1 #dim"], Float[torch.Tensor, "*batch 1 #dim"]
     ]:
+        # (bs, seq_len, sen_len). If i and j patches are from the same var and sample, then (i,j) is Ture
         id_mask = torch.logical_and(
-            # (bs, seq_len, sen_len). If i and j has the same value, then Ture
-            torch.eq(sample_id.unsqueeze(-1), sample_id.unsqueeze(-2)),
-            torch.eq(variate_id.unsqueeze(-1), variate_id.unsqueeze(-2)),
+            torch.eq(sample_id.unsqueeze(-1), sample_id.unsqueeze(-2)),    # if i and j patches are from the same sample
+            torch.eq(variate_id.unsqueeze(-1), variate_id.unsqueeze(-2)),  # if i and j patches are from the same var
         )
 
-        # Total number of observations  (bs, P, 1)
+        # For each patch, compute the total num_obs/tokens from patches within the same variate and sample. (bs, P, 1)
         tobs = reduce(
             id_mask * reduce(observed_mask, "... seq dim -> ... 1 seq", "sum"),
             "... seq1 seq2 -> ... seq1 1",
@@ -121,8 +121,14 @@ class PackedStdScaler(PackedScaler):
         )
         var = safe_div(var, (tobs - self.correction))
         scale = torch.sqrt(var + self.minimum_scale)
-        loc[sample_id == 0] = 0
-        scale[sample_id == 0] = 1
+
+        # Original codes have following inplace operations without the confition.
+        # But prefix tuning cannot use these!
+        # It will change the version of loc and scale, even though sample_id==0 is an empty tensor.
+        # Add this condition, as prefix tuning there will no sample_id == 0
+        if (sample_id == 0).any():
+            loc[sample_id == 0] = 0
+            scale[sample_id == 0] = 1
         return loc, scale
 
 

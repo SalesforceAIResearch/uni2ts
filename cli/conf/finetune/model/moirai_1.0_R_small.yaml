@@ -22,7 +22,7 @@ _args_:
   max_dim: 128
   loss_func:
     _target_: uni2ts.loss.packed.PackedNLLLoss
-  lr: 1e-3
+  lr: 1e-4 #1e-3
   weight_decay: 1e-1
   beta1: 0.9
   beta2: 0.98

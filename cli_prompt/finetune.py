@@ -80,6 +80,7 @@ class DataModule(L.LightningDataModule):
         )
         return val_dataloader
 
+    # ToDo: Use batch size of train_loader's yaml for both trian and val loader
     @property
     def batch_size(self) -> int:
         return self.cfg.train_dataloader.batch_size // (
@@ -101,8 +102,11 @@ def main(cfg: DictConfig):
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
 
+    task_kwargs = instantiate(cfg.task)
+
     model: L.LightningModule = get_class(cfg.model._target_).load_from_checkpoint(
-        **call(cfg.model._args_, _convert_="all"), data=cfg.data.dataset
+        **call(cfg.model._args_, _convert_="all"), data=cfg.data.dataset,
+        task_kwargs=instantiate(cfg.task)
     )
 
     model.init_after_loading_moirai()
@@ -114,14 +118,23 @@ def main(cfg: DictConfig):
     # cfg.data: use the corresponding yaml in data folder based on the passed data name.
     # instantiate _target_ in that yaml, which is SimpleDatasetBuilder in etth1
     train_dataset: Dataset = instantiate(cfg.data).load_dataset(
-        model.create_train_transform()  # This transform includes patching and flatten,etc
+        model.create_train_transform()
     )
+
+    # train_dataset: Dataset = instantiate(cfg.data).load_dataset(
+    #     model.create_train_transform(prediction_length=cfg.val_data._args_.prediction_lengths[0],
+    #                                  context_length=cfg.val_data._args_.context_lengths[0],
+    #                                  patch_size=cfg.val_data._args_.patch_sizes[0])
+    # )
+
     val_dataset: Optional[Dataset] = (
         instantiate(cfg.val_data).load_dataset(model.create_val_transform)
         if "val_data" in cfg
         else None
     )
     L.seed_everything(cfg.seed + trainer.logger.version, workers=True)
+
+    # trainer.validate(model, datamodule=DataModule(cfg, train_dataset, val_dataset))
     trainer.fit(
         model,
         datamodule=DataModule(cfg, train_dataset, val_dataset),

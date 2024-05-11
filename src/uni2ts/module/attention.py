@@ -255,7 +255,7 @@ class GroupedQueryAttention(nn.Module):
         query: Float[torch.Tensor, "*batch q_len dim"],
         key: Float[torch.Tensor, "*batch kv_len dim"],
         value: Float[torch.Tensor, "*batch kv_len dim"],
-        attn_mask: Optional[Bool[torch.Tensor, "*batch q_len kv_len"]] = None,  # How to obtain the input attn_mask?
+        attn_mask: Optional[Bool[torch.Tensor, "*batch q_len kv_len"]] = None,  # Based on sample_id
         query_var_id: Optional[Int[torch.Tensor, "*batch q_len"]] = None,
         kv_var_id: Optional[Int[torch.Tensor, "*batch kv_len"]] = None,
         query_time_id: Optional[Int[torch.Tensor, "*batch q_len"]] = None,
@@ -290,12 +290,7 @@ class GroupedQueryAttention(nn.Module):
 
         # The following ids are (bs, 1, 1, len)
         query_var_id, kv_var_id = self._get_var_id(query, key, query_var_id, kv_var_id)
-        query_time_id, kv_time_id = self._get_time_id(
-            query,
-            key,
-            query_time_id,
-            kv_time_id,
-        )
+        query_time_id, kv_time_id = self._get_time_id(query, key, query_time_id, kv_time_id,)
 
         # attn_mask is a float mask that is added to the attention score.
         # Same as paper, current version only uses var_ids (binary additive bias). Time ids are None.

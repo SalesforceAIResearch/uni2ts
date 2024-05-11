@@ -74,14 +74,14 @@ class MoiraiModule(nn.Module):
             use_glu=True,
             use_qk_norm=True,
             var_attn_bias_layer=partial(BinaryAttentionBias),  # Binary attn bias for Variate id
-            time_qk_proj_layer=partial(  # RoPE for Time index
+            time_qk_proj_layer=partial(                        # RoPE for Time index
                 QueryKeyProjection,
                 proj_layer=RotaryProjection,
                 kwargs=dict(max_len=max_seq_len),
                 partial_factor=(0.0, 0.5),
             ),
             shared_var_attn_bias=False,
-            shared_time_qk_proj=True,  # Shared? How?
+            shared_time_qk_proj=True,                          # Different layers use the same time RoPE QK
             d_ff=None,
         )
         self.distr_output = distr_output
@@ -89,18 +89,36 @@ class MoiraiModule(nn.Module):
 
     def forward(
         self,
-        target: Float[torch.Tensor, "*batch seq_len max_patch"],        # (bs, P_past + P_future, patch_size)
-        observed_mask: Bool[torch.Tensor, "*batch seq_len max_patch"],  # (bs, P_past + P_future, patch_size)
-        sample_id: Int[torch.Tensor, "*batch seq_len"],                 # (bs, P_past + P_future), 0/1
-        time_id: Int[torch.Tensor, "*batch seq_len"],                   # (bs, P_past + P_future)
-        variate_id: Int[torch.Tensor, "*batch seq_len"],                # (bs, P_past + P_future)
-        prediction_mask: Bool[torch.Tensor, "*batch seq_len"],          # (bs, P_past + P_future)
+        target: Float[torch.Tensor, "*batch seq_len max_patch"],        # (bs, num_patch, max_patch_size)
+        observed_mask: Bool[torch.Tensor, "*batch seq_len max_patch"],  # (bs, num_patch, max_patch_size)
+        sample_id: Int[torch.Tensor, "*batch seq_len"],                 # (bs, num_patch), 0/1 in eval
+        time_id: Int[torch.Tensor, "*batch seq_len"],                   # (bs, num_patch)
+        variate_id: Int[torch.Tensor, "*batch seq_len"],                # (bs, num_patch)
+        prediction_mask: Bool[torch.Tensor, "*batch seq_len"],          # (bs, num_patch)
         patch_size: Int[torch.Tensor, "*batch seq_len"],
     ) -> Distribution:
 
-        # loc, scale are (bs, P_past + P_future, 1). The location and scale for that patch.
-        # Patches have the same loc/scale if they are from the same variate.
-        # If patches from padding, their loc/scale are zeros.
+        """
+        num_patches:
+            - 'max_length' of model due to sequence packing in training;
+            -  num of patches in context+prediction range in eval.
+
+        :param target: Flatten patchified target (including future), padded to num_patch (dim 1) and max_patch_size (dim 2).
+        :param observed_mask: If a time step is observed. (dim 2)
+        :param sample_id: Sample_id in a packed bin. Starst from 1. If a patch is padded, its id is 0.
+        :param time_id: Time id for each patch. For each sample, its time_id starts with 0 and increases in order.
+        :param variate_id: Variate id for each patch. For each sample, randomly select this id in train; in order in eval.
+        :param prediction_mask: Distinguish context and prediction patches
+        :param patch_size: Patch size for each sample. Different samples may have different patch size.
+
+        In MoiraiFinetune: Except sample_id, the others are from transformation.
+        In MoiraiForecast: All are from _convert.
+        """
+
+        # loc, scale are (bs, num_patch, 1). The location and scale for that patch.
+        # Patches have the same loc/scale if they are from the same variate and the same sample.
+        # In another word, loc/scale are computed over a variate of a sample, and applied to the patches in it.
+        # If patches from padding, their loc/scale are zeros and ones, respectively.
         loc, scale = self.scaler(
             target,
             observed_mask * ~prediction_mask.unsqueeze(-1),  # Observed and not in prediction range
@@ -109,8 +127,8 @@ class MoiraiModule(nn.Module):
         )
         scaled_target = (target - loc) / scale
 
-        # Project TS patches into representation, use the corresponding projection layer based on patch_size
-        # (bs, P, d_model)
+        # Project TS patches into representation, use the corresponding weight and bias based on patch_size.
+        # (bs, num_patch, d_model)
         reprs = self.in_proj(scaled_target, patch_size)
 
         # ToDo: Integrate LLM's aligned embeddings here
@@ -119,7 +137,7 @@ class MoiraiModule(nn.Module):
         masked_reprs = mask_fill(reprs, prediction_mask, self.mask_encoding.weight)
         reprs = self.encoder(
             masked_reprs,
-            packed_attention_mask(sample_id),
+            packed_attention_mask(sample_id),  # (bs, num_patch, num_patch). If patches are from the same sample.
             time_id=time_id,
             var_id=variate_id,
         )

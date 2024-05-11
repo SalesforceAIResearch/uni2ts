@@ -12,7 +12,7 @@ from transformers import (
     BertModel,
     BertTokenizer
 )
-
+import math
 from uni2ts.model.moirai import MoiraiModule
 from collections.abc import Callable, Sequence
 from typing import Any, Optional
@@ -49,12 +49,16 @@ from uni2ts.transform import (
     MaskedPrediction,
     PackFields,
     PatchCrop,
+    SpecifiedPatchCrop,
     Patchify,
     SampleDimension,
     SelectFields,
     SequencifyField,
     Transformation,
+    AddSampleIndex,
+    PadOutRangeTokens
 )
+from einops import repeat
 
 
 def get_data_description(data: str):
@@ -67,20 +71,28 @@ def get_data_description(data: str):
     return content
 
 
-"""
-Finetune this model can be:
-    1) Finetune in the same way as MoiraiFinetune: No specific patch_size/context_length/prediction_length.
-       Random sample sequence from the TS, mask a random ratio of subsequence as prediction range.
-    2) Finetune with the given patch_size/context_length/prediction_length. Like MoiraiForecast.
-"""
+def calculate_lags(target):
+    # x_enc: (Num channels, Time, 1)  Now: (Num channels, Num patches, 128) --> has been flatten to 1d (5000)
+    q_fft = torch.fft.rfft(target, dim=-1)
+    k_fft = torch.fft.rfft(target, dim=-1)
+    res = q_fft * torch.conj(k_fft)
+    corr = torch.fft.irfft(res, dim=-1)
+    _, lags = torch.topk(corr, 5, dim=-1)
+    return lags
 
 
 class LlmMoiraiFinetune(L.LightningModule):
+    """
+    No sequence packing! Each item in batch is a individual sample.
+    Pass specific context_length, prediction_length and patch_size when finetuning.
+
+    """
     seq_fields: tuple[str, ...] = (
         "target",
         "observed_mask",
         "time_id",
         "variate_id",
+        "sample_id",
         "prediction_mask",
         "patch_size",
     )
@@ -97,7 +109,7 @@ class LlmMoiraiFinetune(L.LightningModule):
         self,
         module_kwargs: dict[str, Any],  # Already provided in checkpoints of Moirai classes
         llm_kwargs: dict[str, Any],
-        task_kwargs: dict[str, Any],  # If not provided, follow MoiraiFinetune's training strategy
+        task_kwargs: dict[str, Any],    # If not provided, follow MoiraiFinetune's training strategy
         data: str,
         min_patches: int,
         min_mask_ratio: float,
@@ -112,16 +124,24 @@ class LlmMoiraiFinetune(L.LightningModule):
         lr: float = 1e-3,
         weight_decay: float = 1e-2,
         log_on_step: bool = False,
-        moirai_opt_mode='freeze'
+        moirai_opt_mode: str = 'freeze'
     ):
         """
-        Name moirai as module to enable to load ckpt from pretrained moirai.
+
         """
+        assert (
+            num_warmup_steps <= num_training_steps
+        ), f"num_warmup_steps ({num_warmup_steps}) should be <= num_training_steps ({num_training_steps})."
 
         super().__init__()
         self.save_hyperparameters()
-        #  Pretrained weights are loaded in main function through load_from_checkpoint.
+
+        # Name moirai as 'module' to enable to load ckpt from pretrained moirai.
         self.module = MoiraiModule(**module_kwargs)
+
+        # Set params related to LLM.
+        self.d_llm = llm_kwargs['d_llm']
+        self.llm_layers = llm_kwargs['llm_layers']
 
         # Set params related to the forecasting task.
         self.patch_size = task_kwargs['patch_size']
@@ -132,19 +152,22 @@ class LlmMoiraiFinetune(L.LightningModule):
         self.data_description = get_data_description(data)
 
     def init_after_loading_moirai(self):
-
-        # Todo: Device?
-        # Set the pretrianed LLM and tokenizer.
-        self.d_llm = self.hparams.llm_kwargs['d_llm']
-        self.llm_layers = self.hparams.llm_kwargs['llm_layers']
+        # Initialize the pretrained LLM and tokenizer.
         self.llm_model = self._set_llm_model(self.hparams.llm_kwargs['llm_model'])  # LLM is frozen
         self.llm_tokenizer = self._set_llm_tokenizer(self.hparams.llm_kwargs['llm_model'])
 
-        # Todo: multiple patch size in Moirai. To project r_txt to ts patch, we need multiple Linear layers.
+        # Todo: By default, Moirai uses multiple patch size for projection. Randomly select patch size for samples.
+        #  If finetune with multi patch size, we need multiple Linear layers to project r_txt to TS patch.
+        #  But note that all the patches are padded to max_patch_size, which is padded in transformation.
+        #  So we also need to pad the e_txt to max_patch_size after projection.
+        #  If patch_size is specified, then it is easier: Only train 1 Linear layer.
+        #  For now, we only consider passing specified configs and using 1 Linear layer for simplicity.
+
+        # Initialize projector
         if isinstance(self.patch_size, int):
             self.projector = nn.Linear(self.d_llm, self.patch_size)
         else:
-            self.projector = nn.ModuleList([nn.Linear(self.d_llm, patch_size) for patch_size in self.module.patch_sizes])
+            self.projector = nn.ModuleList([nn.Linear(self.d_llm, ps) for ps in self.module.patch_sizes])
 
     def forward(
             self,
@@ -158,35 +181,94 @@ class LlmMoiraiFinetune(L.LightningModule):
             num_samples: Optional[int] = None,
     ) -> Float[torch.Tensor, "*batch sample seq_len max_patch"]:
 
-        """
-        Inputs have been patchfied and flattened.
-        Add prompt prefix to the sequence.
-        Add a new field of prompt? --> Need to modify moirai module
-        """
+        # ToDo: Now it is only for uni-variate. Not flatten multi-variate.
 
         # For each TS in the batch, generate a prompt
-        prompt = []
-        for b in range(target.size(0)):  # Todo: Is it the correct way to get batch_size?
-            prompt_ = self._get_sample_prompt()
-            prompt.append(prompt_)
+        prompt = self._get_sample_prompt(target, observed_mask, prediction_mask)
 
-        #  Get LLM reprs of prompt. Tensor: [bs, prompt_len, d_llm]
+        #  Get LLM reprs of prompt.
+        #  ToDo: Need to process prompt_len. max_length=2048 is not compatible with Moirai's max_length.
         prompt = self.llm_tokenizer(prompt, return_tensors="pt", padding=True, truncation=True, max_length=2048)
+        prompt = prompt.to(self.llm_model.device)
         prompt_reprs = self.llm_model(input_ids=prompt.input_ids,
-                                      attention_mask=prompt.attention_mask).last_hidden_state
-        # prompt_reprs = prompt_reprs[:, :, :self.d_ff]
-        # prompt_reprs = torch.reshape(prompt_reprs, (-1, n_vars, dec_out.shape[-2], dec_out.shape[-1]))
-        # prompt_reprs = prompt_reprs.permute(0, 1, 3, 2).contiguous()
+                                      attention_mask=prompt.attention_mask).last_hidden_state  # (bs, num_prompt_patches, d_llm)
 
-        # Use projector to map r_p to e_p. Tensor:[bs, prompt_len, patch_size/max_patch]?
+        # ToDo: Add a Q-former to reduce prompt length to a fixed length!
+        #  Samples from different batches have different prompt length.
+
+        # Use projector to map r_p to e_p. (bs, num_prompt_patches, patch_size)
         if isinstance(self.patch_size, int):
             prompt_prefix = self.projector(prompt_reprs)
         else:
             # Todo: Use the specific patch_size for each sample...
             prompt_prefix = self.projector[patch_size](prompt_reprs)
 
-        # Todo: Prepend prompt, modify the masks and ids.
-        prompt_target = torch.cat([prompt_prefix, target], dim=1)
+        batch_size = prompt_prefix.size(0)
+        num_prompt_tokens = prompt_prefix.size(1)
+
+        # Prepend prompt, modify the masks and ids.
+
+        #  Pad last dim of prompt_prefix to max_patch_size.
+        padded_prompt_prefix = torch.zeros((prompt_prefix.size(0), prompt_prefix.size(1), max(self.module.patch_sizes)),
+                                           dtype=prompt_prefix.dtype,
+                                           device=target.device)
+        padded_prompt_prefix[:, :, :prompt_prefix.size(2)] = prompt_prefix  # (bs, num_prompt_patches, max_patch_size)
+
+        #  First patch of each sample starts with non-observed values due to padding.
+        #  Can we directly prepend prompt to target? Then that patch will be [True, True, False, ..., True, ...]
+        #  Time Series is cut into separated segments by the mask... Not consecutive.
+        #  Can! Not necessary to handle it. It is common for patching.
+        prompt_observed_mask = torch.zeros((prompt_prefix.size(0), prompt_prefix.size(1), max(self.module.patch_sizes)),
+                                           dtype=observed_mask.dtype,
+                                           device=observed_mask.device)
+        prompt_observed_mask[:, :, :prompt_prefix.size(2)] = True
+
+        # og_target = target
+        # og_observed_mask = observed_mask
+        # og_sample_id = sample_id
+        # og_time_id = time_id
+        # og_variate_id = variate_id
+        # og_prediction_mask = prediction_mask
+        # og_patch_size = patch_size
+
+        target = torch.cat([padded_prompt_prefix, target], dim=1)
+        observed_mask = torch.cat([prompt_observed_mask, observed_mask], dim=1)
+
+        # Each item is an individual sample and none of patches is completely padded, so all sample_ids are ones.
+        sample_id = torch.cat(
+            [torch.ones((batch_size, num_prompt_tokens), dtype=sample_id.dtype, device=sample_id.device), sample_id],
+            dim=1
+        )
+
+        # Todo: For uni-channel are as below. How to deal with flatten multi-channel? prompt as a new variate?
+        # Treat prompt patches as TS patches, so we need to add original time_id by num_prompt_patches.
+        # Then concat with [0,..., num_prompt_patches].
+        # No Sequence packing, so no worry about the ending patches are padded and with time id of zeros.
+        time_id = torch.cat(
+            [torch.arange(0, num_prompt_tokens, dtype=time_id.dtype, device=time_id.device).repeat(time_id.size(0), 1),
+             time_id + num_prompt_tokens],
+            dim=1
+        )
+
+        # ToDo: For uni-channel, duplicate. For flatten multi-channel, create a new variate.
+        #  Cannot be the same as the ones in exsisting variates. Need to in the max_dim range.
+        variate_id = repeat(
+            variate_id[:, 0],
+            'batch -> batch seq_len',
+            seq_len=variate_id.shape[1] + num_prompt_tokens
+        )
+
+        prediction_mask = torch.cat(
+            [torch.zeros((batch_size, num_prompt_tokens), dtype=prediction_mask.dtype, device=prediction_mask.device),
+             prediction_mask],
+            dim=1
+        )
+
+        patch_size = repeat(
+            patch_size[:, 0],
+            'batch -> batch seq_len',
+            seq_len=patch_size.shape[1] + num_prompt_tokens
+        )
 
         distr = self.module(
             target,
@@ -208,49 +290,86 @@ class LlmMoiraiFinetune(L.LightningModule):
         time_id: Int[torch.Tensor, "*batch seq_len"],
         variate_id: Int[torch.Tensor, "*batch seq_len"],
         prediction_mask: Bool[torch.Tensor, "*batch seq_len"],
-        patch_size: Int[torch.Tensor, "*batch seq_len"],  # Can different patches in a sample have differnet patch_sizes?
+        patch_size: Int[torch.Tensor, "*batch seq_len"],
     ) -> Float[torch.Tensor, ""]:
 
         # For each TS in the batch, generate a prompt
-        prompt = []
-        for b in range(target.size(0)):  # Todo: Is it the correct way to get batch_size?
-            prompt_ = self._get_sample_prompt()
-            prompt.append(prompt_)
+        prompt = self._get_sample_prompt(target, observed_mask, prediction_mask)
 
-        #  Get LLM reprs of prompt. Tensor: [bs, prompt_len, d_llm]
+        #  Get LLM reprs of prompt.
+        #  ToDo: Need to process prompt_len. max_length=2048 is not compatible with Moirai's max_length.
         prompt = self.llm_tokenizer(prompt, return_tensors="pt", padding=True, truncation=True, max_length=2048)
-        prompt = prompt.to(self.llm_model.device)  # Is it okay if using multi GPU?
+        prompt = prompt.to(self.llm_model.device)
         prompt_reprs = self.llm_model(input_ids=prompt.input_ids,
-                                      attention_mask=prompt.attention_mask).last_hidden_state
-        # prompt_reprs = prompt_reprs[:, :, :self.d_ff]
-        # prompt_reprs = torch.reshape(prompt_reprs, (-1, n_vars, dec_out.shape[-2], dec_out.shape[-1]))
-        # prompt_reprs = prompt_reprs.permute(0, 1, 3, 2).contiguous()
+                                      attention_mask=prompt.attention_mask).last_hidden_state   # (bs, num_prompt_patches, d_llm)
 
-        # Use projector to map r_p to e_p. Tensor:[bs, prompt_len, patch_size/max_patch]?
+        # ToDo: Add a Q-former to reduce prompt length to a fixed length!
+        #  Samples from different batches have different prompt length.
+
+        # Use projector to map r_p to e_p. (bs, num_prompt_patches, patch_size)
         if isinstance(self.patch_size, int):
             prompt_prefix = self.projector(prompt_reprs)
         else:
             # Todo: Use the specific patch_size for each sample...
-            # batch_size, seq_len, _ = prompt_reprs.shape
-            # outputs = torch.zeros_like(x)
-            #
-            # # Iterate over each element in the batch and sequence
-            # for b in range(batch_size):
-            #     for s in range(seq_len):
-            #         # Find the index of the projector based on the patch size
-            #         projector_index = self.patch_sizes.index(patch_size[b, s].item())
-            #         # Select the appropriate FC layer and apply it
-            #         outputs[b, s] = self.projector[projector_index](x[b, s])
-
             prompt_prefix = self.projector[patch_size](prompt_reprs)
 
-        # Todo:
-        # Patch size doesn't get involved in training...
-        # target's last dim is max_patch_size, 128 for example.
-        # How to map r_p to e_p? How to concat?
+        batch_size = prompt_prefix.size(0)
+        num_prompt_tokens = prompt_prefix.size(1)
 
-        # Todo: Prepend prompt, modify the masks and ids.
-        prompt_target = torch.cat([prompt_prefix, target], dim=1)
+        # Prepend prompt, modify the masks and ids.
+
+        #  Pad last dim of prompt_prefix to max_patch_size.
+        padded_prompt_prefix = torch.zeros((prompt_prefix.size(0), prompt_prefix.size(1), max(self.module.patch_sizes)),
+                                           dtype=prompt_prefix.dtype,
+                                           device=target.device)
+        padded_prompt_prefix[:, :, :prompt_prefix.size(2)] = prompt_prefix  # (bs, num_prompt_patches, max_patch_size)
+
+        #  First patch of each sample starts with non-observed values due to padding.
+        #  Can we directly prepend prompt to target? Then that patch will be [True, True, False, ..., True, ...]
+        #  Time Series is cut into separated segments by the mask... Not consecutive.
+        #  Can! Not necessary to handle it. It is common for patching.
+        prompt_observed_mask = torch.zeros((prompt_prefix.size(0), prompt_prefix.size(1), max(self.module.patch_sizes)),
+                                           dtype=observed_mask.dtype,
+                                           device=observed_mask.device)
+        prompt_observed_mask[:, :, :prompt_prefix.size(2)] = True
+
+        target = torch.cat([padded_prompt_prefix, target], dim=1)
+        observed_mask = torch.cat([prompt_observed_mask, observed_mask], dim=1)
+
+        # Each item is an individual sample and none of patches is completely padded, so all sample_ids are ones.
+        sample_id = torch.cat(
+            [torch.ones((batch_size, num_prompt_tokens), dtype=sample_id.dtype, device=sample_id.device), sample_id],
+            dim=1
+        )
+
+        # Todo: For uni-channel are as below. How to deal with flatten multi-channel? prompt as a new variate?
+        # Treat prompt patches as TS patches, so we need to add original time_id by num_prompt_patches.
+        # Then concat with [0,..., num_prompt_patches].
+        # No Sequence packing, so no worry about the ending patches are padded and with time id of zeros.
+        time_id = torch.cat(
+            [torch.arange(0, num_prompt_tokens, dtype=time_id.dtype, device=time_id.device).repeat(time_id.size(0), 1),
+             time_id + num_prompt_tokens],
+            dim=1
+        )
+
+        # ToDo: For uni-channel, duplicate. For flatten multi-channel, create a new variate.
+        #  Cannot be the same as the ones in exsisting variates. Need to in the max_dim range.
+        variate_id = repeat(
+            variate_id[:, 0],
+            'batch -> batch seq_len',
+            seq_len=variate_id.shape[1]+num_prompt_tokens
+        )
+
+        prediction_mask = torch.cat(
+            [torch.zeros((batch_size, num_prompt_tokens), dtype=prediction_mask.dtype, device=prediction_mask.device), prediction_mask],
+            dim=1
+        )
+
+        patch_size = repeat(
+            patch_size[:, 0],
+            'batch -> batch seq_len',
+            seq_len=patch_size.shape[1]+num_prompt_tokens
+        )
 
         distr = self.module(
             target,
@@ -272,15 +391,7 @@ class LlmMoiraiFinetune(L.LightningModule):
         return loss
 
     def training_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        """"
-        Same as MoiraiFinetune
-        """
-
         self.llm_model.eval()
-        # todo: To freeze dropout in LLM and Moirai (if frozen)
-        # for module in self.module.modules():
-        #     if isinstance(module, nn.Dropout):
-        #         module.eval()
 
         loss = self.loss(**batch)
         batch_size = (
@@ -300,9 +411,6 @@ class LlmMoiraiFinetune(L.LightningModule):
         return loss
 
     def validation_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        """"
-        Same as MoiraiFinetune
-        """
         loss = self.loss(**batch)
         batch_size = (
             batch["sample_id"].max(dim=1).values.sum() if "sample_id" in batch else None
@@ -318,6 +426,7 @@ class LlmMoiraiFinetune(L.LightningModule):
             batch_size=batch_size,
             rank_zero_only=True,
         )
+
         return loss
 
     def configure_optimizers(self) -> dict:
@@ -328,25 +437,39 @@ class LlmMoiraiFinetune(L.LightningModule):
             - Handle params in Moirai based on  moirai_opt_mode
         Follow the same optimizer setup as MoiraiFinetune.
         """
-        # Freeze Moirai. Only update projectors
+        # Todo: select trainable params
+        # Set all params except the ones in projector to Non-trainable
+        for pn, p in self.named_parameters():
+            if not pn.startswith('projector'):
+                p.requires_grad = False
+
+        # 1. Freeze Moirai
         if self.hparams.moirai_opt_mode == 'freeze':
-            for param in self.module.parameters():
-                param.requires_grad = False
-
-        # Freeze params except for LN in Moirai.
-        elif self.hparams.moirai_opt_mode == 'LN':
-            for mn, m in self.module.named_modules():
-                for pn, p in m.named_parameters():
-                    if isinstance(m, nn.LayerNorm) or not p.requires_grad:
-                        continue
-                    else:
-                        p.requires_grad = False
-
-        # Finetune all the params of morai.
-        elif self.hparams.moirai_opt_mode == 'full':
             pass
+        # 2. Fully finetune Moirai
+        elif self.hparams.moirai_opt_mode == 'full':
+            for pn, p in self.named_parameters():
+                if pn.startswith('module'):
+                    p.requires_grad = True
+        # 3. Partially finetune Moirai
         else:
-            raise NotImplementedError
+            for mn, m in self.named_modules():
+                if mn.startswith('module'):
+                    # Finetune Norm layers
+                    if 'Norm' in self.hparams.moirai_opt_mode:
+                        if isinstance(m, RMSNorm):
+                            for pn, p in m.named_parameters():
+                                p.requires_grad = True
+                    # Finetune Input Projection layers
+                    if 'InProject' in self.hparams.moirai_opt_mode:
+                        if isinstance(m, MultiInSizeLinear):
+                            for pn, p in m.named_parameters():
+                                p.requires_grad = True
+                    # Finetune Output Projection layers
+                    if 'OutProject' in self.hparams.moirai_opt_mode:
+                        if isinstance(m, MultiOutSizeLinear):
+                            for pn, p in m.named_parameters():
+                                p.requires_grad = True
 
         decay = set()
         no_decay = set()
@@ -422,6 +545,10 @@ class LlmMoiraiFinetune(L.LightningModule):
         }
 
     def _set_llm_model(self, llm_model):
+        """
+        Adapt from https://github.com/KimMeen/Time-LLM/blob/main/models/TimeLLM.py
+        """
+
         if llm_model == 'LLAMA':
             self.llama_config = LlamaConfig.from_pretrained('huggyllama/llama-7b')
             self.llama_config.num_hidden_layers = self.llm_layers
@@ -433,6 +560,7 @@ class LlmMoiraiFinetune(L.LightningModule):
                     trust_remote_code=True,
                     local_files_only=True,
                     config=self.llama_config,
+                    attn_implementation="eager",
                     # load_in_4bit=True
                 )
             except EnvironmentError:  # downloads model from HF is not already done
@@ -442,6 +570,7 @@ class LlmMoiraiFinetune(L.LightningModule):
                     trust_remote_code=True,
                     local_files_only=False,
                     config=self.llama_config,
+                    attn_implementation="eager",
                     # load_in_4bit=True
                 )
 
@@ -496,6 +625,10 @@ class LlmMoiraiFinetune(L.LightningModule):
         return llm_model
 
     def _set_llm_tokenizer(self, llm_model):
+        """
+        Adapt from https://github.com/KimMeen/Time-LLM/blob/main/models/TimeLLM.py
+        """
+
         if llm_model == 'LLAMA':
             try:
                 tokenizer = LlamaTokenizer.from_pretrained(
@@ -551,64 +684,96 @@ class LlmMoiraiFinetune(L.LightningModule):
 
         return tokenizer
 
-    # def _load_pretrianed_moirai_moudle(self):
-    #     return None
+    @torch.no_grad()
+    def _get_sample_prompt(self, target, observed_mask, prediction_mask):
+        prompt = []
+        for b in range(target.size(0)):
+            # Dataset Description
+            prompt_ = (
+                f"<|start_prompt|>Dataset description: {self.data_description};"
+            )
 
-    def _get_sample_prompt(self):
-        # Dataset Description
-        prompt = (
-            f"<|start_prompt|>Dataset description: {self.data_description};"
-        )
+            # Task description if task params are known.
+            if self.prediction_length and self.context_length:
+                prompt_ += f"Task description: forecast the next {str(self.prediction_length)} steps given the previous {str(self.context_length)} steps information; "
 
-        # Task description if task params are known.
-        if self.prediction_length and self.context_length:
-            prompt += f"Task description: forecast the next {str(self.prediction_length)} steps given the previous {str(self.context_length)} steps information; "
+            # Todo: Compute the statistics for each sample.
+            # In Moirai, each sample is a MTS? --> Compute channel-wise statistics.
+            # It has been flattened. Need to use variate_id to compute.
+            # Do we need to consider pad/missing values when computing statistics?
 
-        # Todo: Compute the statistics for each sample.
-        # In Moirai, each sample is a MTS? --> Compute channel-wise statistics.
-        # It has been flattened. Need to use variate_id to compute.
-        # Do we need to consider pad/missing values when computing statistics?
-        # if self.hparams.prompt_statistics:
-        #     for channel in data_variates_names:
-        #         min_values_str = str(min_values[b].tolist()[0])
-        #         max_values_str = str(max_values[b].tolist()[0])
-        #         median_values_str = str(medians[b].tolist()[0])
-        #         lags_values_str = str(lags[b].tolist())
-        #         prompt_ += f"Input statistics of {channel}: min value {min_values_str}, max value {max_values_str}, median value {median_values_str}, the trend of input is {'upward' if trends > 0 else 'downward'}, top 5 lags are : {lags_values_str};"
+            # if self.hparams.prompt_statistics:
 
-        prompt += "<|<end_prompt>|>"
+            # Mask indicating the observed tokens in context range for a sample b.
+            mask = observed_mask[b] & ~prediction_mask[b].unsqueeze(-1).expand_as(observed_mask[b])
+            valid_target = target[b][mask]  # A 1D tensor with observed context time steps
+            min_value = torch.min(valid_target).item()
+            max_value = torch.max(valid_target).item()
+            median = torch.median(valid_target).item()
+            lags = calculate_lags(valid_target)
+            trend = valid_target.diff().sum()
+
+            min_value_str = str(round(min_value, 4))
+            max_value_str = str(round(max_value, 4))
+            median_value_str = str(round(median, 4))
+            lags_values_str = str(lags.tolist())
+            prompt_ += (f"Input statistics: "
+                        f"min value {min_value_str}, "
+                        f"max value {max_value_str}, "
+                        f"median value {median_value_str}, "
+                        f"the trend of input is {'upward' if trend > 0 else 'downward'}, "
+                        f"top 5 lags are : {lags_values_str};")
+
+            prompt_ += "<|<end_prompt>|>"
+            prompt.append(prompt_)
+
         return prompt
 
-    def calcute_lags(self, x_enc):
-        q_fft = torch.fft.rfft(x_enc.permute(0, 2, 1).contiguous(), dim=-1)
-        k_fft = torch.fft.rfft(x_enc.permute(0, 2, 1).contiguous(), dim=-1)
-        res = q_fft * torch.conj(k_fft)
-        corr = torch.fft.irfft(res, dim=-1)
-        mean_value = torch.mean(corr, dim=1)
-        _, lags = torch.topk(mean_value, self.top_k, dim=-1)
-        return lags
+
+    @property
+    def num_time_patches(self):
+        return math.ceil(self.context_length / self.patch_size) + math.ceil(self.prediction_length / self.patch_size)
+
+    @property
+    def is_specified_all_config(self):
+        return self.context_length and self.prediction_length and self.patch_size
 
     def create_train_transform(self) -> Transformation:
-        # Out of the PL Trainer pipeline, a custom step.
-        # Called in cli/finetune.py to process the training dataset.
-        # Todo: Can we specify context_length and prediction_length in Finetuning?
+        """
+        Transformation per sample for train dataset.
+        Called in cli/finetune.py to process the training dataset.
+        If 'wide', each data_entry is the entire record of a channel.
+        If 'wide_multivariate', each data_entry is the entire records of all the channels.
+        """
+
         return (
+            # Initial 'target' is [(L, ), ..., (L, )], as _pa_column_to_numpy of HuggingFaceDatasetIndexer.
+            # Only 1 series in 'target' if build data in 'wide'. Have multi series if build in 'wide_multivariate'
+            # Remove SampleDimension if build in 'wide_multivariate'.  # ToDo: Why?
             SampleDimension(
                 max_dim=self.hparams.max_dim,
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
-            )
-            # add a new field of "patch_size" to data dict, randomly choose from range based on frequency
-            + GetPatchSize(
+            ) +
+
+            # add a new field of "patch_size" to data dict.
+            # randomly choose from range based on frequency
+            GetPatchSize(
                 min_time_patches=self.hparams.min_patches,
                 target_field="target",
                 patch_sizes=self.module.patch_sizes,
-                patch_size_constraints=DefaultPatchSizeConstraints(),
+                patch_size_constraints=FixedPatchSizeConstraints(self.patch_size) if self.patch_size else DefaultPatchSizeConstraints(),
                 offset=True,
             )
+
             # Crop fields in a data_entry in the temporal dimension based on a patch_size.
-            + PatchCrop(
-                min_time_patches=self.hparams.min_patches,
+            # Sequences in fields will be cropped into a size of random multiple of patch sizes.
+            # Crop size (num_patches) is randomly sampled from [min_time_patches, max_time_patches].
+            # Start point of cropping is randomly selected. So each sample has a different num_patches.
+
+            + SpecifiedPatchCrop(
+                min_time_patches=self.hparams.min_patches if not self.is_specified_all_config else self.num_time_patches,
+                max_time_patches=None if not self.is_specified_all_config else self.num_time_patches,
                 max_patches=self.module.max_seq_len,
                 will_flatten=True,
                 offset=True,
@@ -624,6 +789,15 @@ class LlmMoiraiFinetune(L.LightningModule):
                 fields=tuple(),
                 optional_fields=("past_feat_dynamic_real",),
             )
+
+            # Set the first tokens in context (1st patch) and last tokens in prediction (the last patch) as Nan.
+            + PadOutRangeTokens(
+                prediction_pad=-self.prediction_length % self.patch_size,
+                context_pad=-self.context_length % self.patch_size,
+                fields=("target",),
+                optional_fields=("past_feat_dynamic_real",),
+            )
+
             # Add a new field 'observed_mask'. Observed or missing: nan are False.
             + AddObservedMask(
                 fields=("target",),
@@ -637,7 +811,9 @@ class LlmMoiraiFinetune(L.LightningModule):
                 optional_fields=("past_feat_dynamic_real",),
                 imputation_method=DummyValueImputation(value=0.0),
             )
-            # Patching the series in fields into patches based on patch_size
+            # Patchify TS record into patches, based on its patch_size field.
+            # No matter used patch_size, pad all the patches to max_patch_size.
+            # Shape of patchified fields of a sample: (1, n_patch, max_patch_size)
             + Patchify(
                 max_patch_size=max(self.module.patch_sizes),
                 fields=("target", "observed_mask"),
@@ -661,29 +837,57 @@ class LlmMoiraiFinetune(L.LightningModule):
                 expected_ndim=3,
                 collection_type=dict,
             )
-            # Add a new field "prediction_mask"
-            + MaskedPrediction(
+
+            + AddSampleIndex(
+                fields=("target",),
+                optional_fields=("past_feat_dynamic_real",),
+                sample_id_field="sample_id",
+                expected_ndim=3,
+                collection_type=dict,
+            )
+
+            # Add a new field "prediction_mask". Random mask patches in the end for prediction.
+            # Mask ratio is uniformly sampled from [min_mask_ratio, max_mask_ratio]
+            # For truncate_fields, truncate the part corresponding to prediction patches.
+            # If no specific prediction length, different samples have different prediction masks?
+            + (MaskedPrediction(
                 min_mask_ratio=self.hparams.min_mask_ratio,
                 max_mask_ratio=self.hparams.max_mask_ratio,
                 target_field="target",
-                truncate_fields=("variate_id", "time_id", "observed_mask"),
+                truncate_fields=("variate_id", "time_id", "sample_id", "observed_mask"),
                 optional_truncate_fields=("past_feat_dynamic_real",),
                 prediction_mask_field="prediction_mask",
                 expected_ndim=3,
-            )
-            # Extend prediction_mask
+            ) if self.prediction_length is None else EvalMaskedPrediction(
+                                                        mask_length=math.ceil(self.prediction_length / self.patch_size),
+                                                        target_field="target",
+                                                        truncate_fields=("variate_id", "time_id", "sample_id", "observed_mask"),
+                                                        optional_truncate_fields=("past_feat_dynamic_real",),
+                                                        prediction_mask_field="prediction_mask",
+                                                        expected_ndim=3,
+                                                        ))
+
+            # Extend prediction_mask for "past_feat_dynamic_real" (If it exists)
+            # set another prediction mask with all False for it in field "prediction_mask".
+            # So there will be 2 items in field "prediction_mask".
             + ExtendMask(
                 fields=tuple(),
                 optional_fields=("past_feat_dynamic_real",),
                 mask_field="prediction_mask",
                 expected_ndim=3,
             )
+
+            # Turn item in field into nparray. Flat along time dimension then pack.
             + FlatPackCollection(
                 field="variate_id",
                 feat=False,
             )
             + FlatPackCollection(
                 field="time_id",
+                feat=False,
+            )
+            + FlatPackCollection(
+                field="sample_id",
                 feat=False,
             )
             + FlatPackCollection(
@@ -705,21 +909,35 @@ class LlmMoiraiFinetune(L.LightningModule):
         )
 
     def create_val_transform(
-        self,
-        offset: int,
-        distance: int,
-        prediction_length: int,
-        context_length: int,
-        patch_size: int,
+            self,
+            offset: int,  # Offset to val split. After offset is used.
+            distance: int,  # distance bt prediction windows, equal to prediction_length
+            prediction_length: int,
+            context_length: int,
+            patch_size: int,
     ) -> Transformation:
+
+        """
+        Transformation per sample for val dataset.
+        These args are from the config yaml of finetune's val dataset.
+        By default, each data_entry is the entire record of a channel.
+        Be called when preparing a batch of data (__get_item__)
+        """
         return (
+            # Initial 'target' is [(L, ), ..., (L, )], as _pa_column_to_numpy of HuggingFaceDatasetIndexer.
+            # Only 1 series in 'target' if build data in 'wide'. Have multi series if build in 'wide_multivariate'
+            # Add a new field of "patch_size" to data dict
+            # randomly choose from range based on frequency
             GetPatchSize(
                 min_time_patches=2,
                 target_field="target",
                 patch_sizes=self.module.patch_sizes,
-                patch_size_constraints=FixedPatchSizeConstraints(patch_size),
+                patch_size_constraints=FixedPatchSizeConstraints(patch_size),  # specify patch size
                 offset=True,
             )
+
+            # For each sample, crop the [prediction_length context_length] region of sequence
+            # The region is computed based on its 'window' (window id)
             + EvalCrop(
                 offset,
                 distance,
@@ -728,6 +946,10 @@ class LlmMoiraiFinetune(L.LightningModule):
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
             )
+
+            # Turn variables in fields as nparray. Then pack the fields.
+            # Seems make no difference for wide data if only 'fields' only get 1 field
+            # Then 'target' is nparray:  (1, *). This 1 is based on _pa_column_to_numpy of HuggingFaceDatasetIndexer?
             + PackFields(
                 output_field="target",
                 fields=("target",),
@@ -737,6 +959,10 @@ class LlmMoiraiFinetune(L.LightningModule):
                 fields=tuple(),
                 optional_fields=("past_feat_dynamic_real",),
             )
+
+            # Pad prediction and context along the time dimension so that can get a multiple of patches
+            # Padded values are Nan.
+            # Therefore, mostly the starting values in the 1st patch are padded.
             + EvalPad(
                 prediction_pad=-prediction_length % patch_size,
                 context_pad=-context_length % patch_size,
@@ -754,11 +980,18 @@ class LlmMoiraiFinetune(L.LightningModule):
                 optional_fields=("past_feat_dynamic_real",),
                 imputation_method=DummyValueImputation(value=0.0),
             )
+
+            # Patchify TS record into patches.
+            # No matter used patch_size, pad all the patches to max_patch_size!
+            # Shape of patchified fields: (1, n_patch, max_patch_size)
+            # Therefore, mostly the ending values in the 1st patch are padded. (to max_patch_size)
             + Patchify(
                 max_patch_size=max(self.module.patch_sizes),
                 fields=("target", "observed_mask"),
                 optional_fields=("past_feat_dynamic_real",),
             )
+
+            # Add a random number to each variate. Randomize for permutation equivariance/invariance.
             + AddVariateIndex(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
@@ -768,6 +1001,7 @@ class LlmMoiraiFinetune(L.LightningModule):
                 randomize=True,
                 collection_type=dict,
             )
+            # Add Time_id for each patch. These ids are in order.
             + AddTimeIndex(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
@@ -775,10 +1009,19 @@ class LlmMoiraiFinetune(L.LightningModule):
                 expected_ndim=3,
                 collection_type=dict,
             )
+
+            + AddSampleIndex(
+                fields=("target",),
+                optional_fields=("past_feat_dynamic_real",),
+                sample_id_field="sample_id",
+                expected_ndim=3,
+                collection_type=dict,
+            )
+
             + EvalMaskedPrediction(
-                mask_length=-prediction_length % patch_size,
+                mask_length=math.ceil(self.prediction_length / self.patch_size),
                 target_field="target",
-                truncate_fields=("variate_id", "time_id", "observed_mask"),
+                truncate_fields=("variate_id", "time_id", "sample_id", "observed_mask"),
                 optional_truncate_fields=("past_feat_dynamic_real",),
                 prediction_mask_field="prediction_mask",
                 expected_ndim=3,
@@ -798,6 +1041,10 @@ class LlmMoiraiFinetune(L.LightningModule):
                 feat=False,
             )
             + FlatPackCollection(
+                field="sample_id",
+                feat=False,
+            )
+            + FlatPackCollection(
                 field="prediction_mask",
                 feat=False,
             )
@@ -811,6 +1058,8 @@ class LlmMoiraiFinetune(L.LightningModule):
                 optional_fields=("past_feat_dynamic_real",),
                 feat=True,
             )
+            # Transform patch_size from int to a sequence (num_patches, patch_size).
+            # For each sample, patch_size is the same.
             + SequencifyField(field="patch_size", target_field="target")
             + SelectFields(fields=list(self.seq_fields))
         )

@@ -23,13 +23,19 @@ _args_:
     d_llm: 4096
     llm_layers: 6
 
-  task_kwargs:
-    _target_: builtins.dict
-    prediction_length: 96
-    context_length: null
-    patch_size: 32  # auto
+#  task_kwargs:
+#    _target_: builtins.dict
+#    prediction_length: 96
+#    context_length: 5000
+#    patch_size: 64  # auto
 
-  moirai_opt_mode: freeze # freeze/LN/full
+#  task_kwargs:
+#    _target_: builtins.dict
+#    prediction_length: 96
+#    context_length: 4000
+#    patch_size: 128  # auto
+
+  moirai_opt_mode: freeze # freeze/full/ Norm+InProject+OutProject
   min_patches: 2
   min_mask_ratio: 0.15
   max_mask_ratio: 0.5

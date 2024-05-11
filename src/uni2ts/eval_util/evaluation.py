@@ -250,7 +250,7 @@ def evaluate_model(
 
     Return results as a Pandas ``DataFrame``.
     """
-    forecasts = model.predict(test_data.input)
+    forecasts = model.predict(test_data.input)  # forecasted future; Add prefix doesn't affect functions here.
 
     return evaluate_forecasts(
         forecasts=forecasts,

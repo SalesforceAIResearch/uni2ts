@@ -57,6 +57,7 @@ class MaskedPrediction(MapFuncMixin, CheckArrNDimMixin, Transformation):
         self.check_ndim("target", target, self.expected_ndim)
         var, time = target.shape[:2]
         prediction_mask = np.zeros((var, time), dtype=bool)
+        # Random sample a mask_ratio from the range
         mask_ratio = np.random.uniform(self.min_mask_ratio, self.max_mask_ratio)
         mask_length = max(1, round(time * mask_ratio))
         prediction_mask[:, -mask_length:] = True

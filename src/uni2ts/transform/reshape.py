@@ -33,7 +33,7 @@ class SequencifyField(Transformation):
     def __call__(self, data_entry: dict[str, Any]) -> dict[str, Any]:
         data_entry[self.field] = data_entry[self.field].repeat(
             data_entry[self.target_field].shape[self.target_axis], axis=self.axis
-        )
+        )  # Repeat num_pacthes times along dim 0
         return data_entry
 
 
@@ -45,7 +45,7 @@ class PackFields(CollectFuncMixin, Transformation):
     feat: bool = False
 
     def __post_init__(self):
-        self.pack_str: str = "* time feat" if self.feat else "* time"
+        self.pack_str: str = "* time feat" if self.feat else "* time"  # Pack along * dim.
 
     def __call__(self, data_entry: dict[str, Any]) -> dict[str, Any]:
         fields = self.collect_func_list(
@@ -54,6 +54,7 @@ class PackFields(CollectFuncMixin, Transformation):
             self.fields,
             optional_fields=self.optional_fields,
         )
+        # fields is a list with popped nparrays from self.fields and optional_fields
         if len(fields) > 0:
             output_field = pack(fields, self.pack_str)[0]
             data_entry |= {self.output_field: output_field}
@@ -111,7 +112,7 @@ class PackCollection(Transformation):
 class FlatPackCollection(Transformation):
     field: str
     feat: bool = False
-
+    # Flatten along time/patch dimension, then pack.
     def __post_init__(self):
         self.pack_str: str = "* feat" if self.feat else "*"
 

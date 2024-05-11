@@ -32,9 +32,9 @@ def main(cfg: DictConfig):
     while True:
         model = call(cfg.model, _partial_=True)(
             prediction_length=metadata.prediction_length,
-            target_dim=metadata.target_dim,
-            feat_dynamic_real_dim=metadata.feat_dynamic_real_dim,
-            past_feat_dynamic_real_dim=metadata.past_feat_dynamic_real_dim,
+            target_dim=metadata.target_dim,  # Based on how the dataset is built.
+            feat_dynamic_real_dim=metadata.feat_dynamic_real_dim,  # Always 0 if using get_custom_eval_dataset
+            past_feat_dynamic_real_dim=metadata.past_feat_dynamic_real_dim,  # Always 0 if using get_custom_eval_dataset
         )
         metrics = instantiate(cfg.metrics, _convert_="all")
         try:

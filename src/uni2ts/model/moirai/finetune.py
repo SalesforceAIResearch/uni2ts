@@ -17,6 +17,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Optional
 
 import lightning as L
+import lightning.pytorch as pl
 import numpy as np
 import torch
 from einops import rearrange
@@ -99,9 +100,11 @@ class MoiraiFinetune(L.LightningModule):
         weight_decay: float = 1e-2,
         log_on_step: bool = False,
     ):
-        #ToDo: Why MoiriaFinetune doesn't specify context_length/prediction_length/patch_size? How to decide during training?
-        # It seems there is no prediction_length, only randomly mask some fraction of patches?
-        # patch_size is selected based on the frequency of TS
+        """
+        MoiraiFinetune doesn't specify context_length/prediction_length/patch_size.
+        These configs are sampled from predefined ranges during training.
+        And they are specified when creating val datasets during validation.
+        """
 
         assert (
             num_warmup_steps <= num_training_steps
@@ -112,15 +115,18 @@ class MoiraiFinetune(L.LightningModule):
 
     def forward(
         self,
-        target: Float[torch.Tensor, "*batch seq_len max_patch"],  # Why max_patch?
+        target: Float[torch.Tensor, "*batch seq_len max_patch"],  # max_seq_len, max_patch_size
         observed_mask: Bool[torch.Tensor, "*batch seq_len max_patch"],
-        sample_id: Int[torch.Tensor, "*batch seq_len"],
+        sample_id: Int[torch.Tensor, "*batch seq_len"],  # 0/1. If a patch is padded (dim 1).
         time_id: Int[torch.Tensor, "*batch seq_len"],
         variate_id: Int[torch.Tensor, "*batch seq_len"],
         prediction_mask: Bool[torch.Tensor, "*batch seq_len"],
         patch_size: Int[torch.Tensor, "*batch seq_len"],
         num_samples: Optional[int] = None,
     ) -> Float[torch.Tensor, "*batch sample seq_len max_patch"]:
+        """
+        See MoiraiModule.forward() for explaination of these params
+        """
         distr = self.module(
             target,
             observed_mask,
@@ -168,7 +174,9 @@ class MoiraiFinetune(L.LightningModule):
         # `**` unpacks a dict's items: each key-value pair is passed as a kwarg to the function
         loss = self.loss(**batch)
 
-        # Why compute batch_szie like this?
+        # Why compute batch_size like this?
+        # To remove the samples with all padding patches from a batch.
+        # I.e. A sample with all sample_ids are 0.
         batch_size = (
             batch["sample_id"].max(dim=1).values.sum() if "sample_id" in batch else None
         )
@@ -206,6 +214,26 @@ class MoiraiFinetune(L.LightningModule):
         return loss
 
     def configure_optimizers(self) -> dict:
+
+        # # Set all params to Non-trainable
+        # for pn, p in self.named_parameters():
+        #     if p.requires_grad:
+        #         p.requires_grad = False
+        # # Finetune Norm layers
+        # for mn, m in self.named_modules():
+        #     if isinstance(m, RMSNorm):
+        #         for pn, p in m.named_parameters():
+        #             p.requires_grad = True
+        #
+        #     if isinstance(m, MultiInSizeLinear):
+        #         for pn, p in m.named_parameters():
+        #             p.requires_grad = True
+        #
+        #     if isinstance(m, MultiOutSizeLinear):
+        #         for pn, p in m.named_parameters():
+        #             p.requires_grad = True
+
+    ##################################################
         decay = set()
         no_decay = set()
 
@@ -289,31 +317,47 @@ class MoiraiFinetune(L.LightningModule):
         }
 
     def create_train_transform(self) -> Transformation:
-        # Out of the PL Trainer pipeline, a custom step.
-        # Called in cli/finetune.py to process the training dataset.
+        """
+        Transformation per sample for train dataset.
+        Called in cli/finetune.py to process the training dataset.
+        By default, each data_entry is the entire record of a channel.
+        """
+
         return (
+            # # ToDo: What is the aim of this?  Remove if ds is mode of 'wide_multivariate'
             SampleDimension(
                 max_dim=self.hparams.max_dim,
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
-            )
-            # add a new field of "patch_size" to data dict, randomly choose from range based on frequency
-            + GetPatchSize(
+            ) +
+
+
+            # add a new field of "patch_size" to data dict.
+            # randomly choose from range based on frequency
+            # ToDo: each sample has a different patch_size?
+            GetPatchSize(
                 min_time_patches=self.hparams.min_patches,
                 target_field="target",
-                patch_sizes=self.module.patch_sizes,
+                patch_sizes=self.module.patch_sizes,  # (64,)  self.module.patch_sizes
                 patch_size_constraints=DefaultPatchSizeConstraints(),
                 offset=True,
             )
+
             # Crop fields in a data_entry in the temporal dimension based on a patch_size.
+            # Sequences in fields will be cropped into a size of random multiple of patch sizes.
+            # Crop size (num_patches) is randomly sampled from [min_time_patches, max_time_patches].
+            # Start point of cropping is randomly selected. So each sample has a different num_patches.
+            # ToDo: Design a crop transformation to crop a given fixed context length and prediction length
             + PatchCrop(
-                min_time_patches=self.hparams.min_patches,
-                max_patches=self.module.max_seq_len,
-                will_flatten=True,
+                min_time_patches=self.hparams.min_patches,  # minimum number of patches for time dimension
+                max_patches=self.module.max_seq_len,  # max number of patches for time * dim dimension (if flatten)
+                will_flatten=True,  # Sequences will be flatten subsequently.
                 offset=True,
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
             )
+
+            # Todo: Why need Pack?
             + PackFields(
                 output_field="target",
                 fields=("target",),
@@ -323,20 +367,22 @@ class MoiraiFinetune(L.LightningModule):
                 fields=tuple(),
                 optional_fields=("past_feat_dynamic_real",),
             )
-            # Add a new field 'observed_mask'. Observed or missing: nan are False.
+            # Add a new field 'observed_mask'. Nan are False.
             + AddObservedMask(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
                 observed_mask_field="observed_mask",
                 collection_type=dict,
             )
-            # Impute the nan values.
+            # Impute nan values.
             + ImputeTimeSeries(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
                 imputation_method=DummyValueImputation(value=0.0),
             )
-            # Patching the series in fields into patches based on patch_size
+            # Patchify TS record into patches.
+            # No matter used patch_size, pad all the patches to max_patch_size.
+            # Shape of patchified fields: (1, n_patch, max_patch_size)
             + Patchify(
                 max_patch_size=max(self.module.patch_sizes),
                 fields=("target", "observed_mask"),
@@ -349,10 +395,10 @@ class MoiraiFinetune(L.LightningModule):
                 variate_id_field="variate_id",
                 expected_ndim=3,
                 max_dim=self.hparams.max_dim,
-                randomize=True,
+                randomize=True,  # Why randomize?
                 collection_type=dict,
             )
-            # Add a new field "time_id".
+            # Add Time_id for each patch. These ids are in order.
             + AddTimeIndex(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
@@ -360,7 +406,12 @@ class MoiraiFinetune(L.LightningModule):
                 expected_ndim=3,
                 collection_type=dict,
             )
-            # Add a new field "prediction_mask"
+
+            # Add a new field "prediction_mask". Random mask patches in the end for prediction.
+            # Mask ratio is uniformly sampled from [min_mask_ratio, max_mask_ratio]
+            # For truncate_fields, truncate the part corresponding to prediction patches.
+            # ToDo: Different samples have different prediction masks?
+            # ToDo: Use EvalMaskedPrediction for a specific prediction length?
             + MaskedPrediction(
                 min_mask_ratio=self.hparams.min_mask_ratio,
                 max_mask_ratio=self.hparams.max_mask_ratio,
@@ -370,13 +421,17 @@ class MoiraiFinetune(L.LightningModule):
                 prediction_mask_field="prediction_mask",
                 expected_ndim=3,
             )
-            # Extend prediction_mask
+            # Extend prediction_mask for "past_feat_dynamic_real" (If it exists)
+            # set another prediction mask with all False for it in field "prediction_mask".
+            # So there will be 2 items in field "prediction_mask".
             + ExtendMask(
                 fields=tuple(),
                 optional_fields=("past_feat_dynamic_real",),
                 mask_field="prediction_mask",
                 expected_ndim=3,
             )
+
+            # Turn item in field into nparray. Flat along time dimension then pack.
             + FlatPackCollection(
                 field="variate_id",
                 feat=False,
@@ -405,20 +460,34 @@ class MoiraiFinetune(L.LightningModule):
 
     def create_val_transform(
         self,
-        offset: int,
-        distance: int,
+        offset: int,                # Offset to val split. After offset is used.
+        distance: int,              # distance bt prediction windows, equal to prediction_length
         prediction_length: int,
         context_length: int,
         patch_size: int,
     ) -> Transformation:
+
+        """
+        Transformation per sample for val dataset.
+        These args are from the config yaml of finetune's val dataset.
+        By default, each data_entry is the entire record of a channel.
+        Be called when preparing a batch of data (__get_item__)
+        """
         return (
+            # Initial 'target' is [(L, ), ..., (L, )], as _pa_column_to_numpy of HuggingFaceDatasetIndexer.
+            # Only 1 series in 'target' if build data in 'wide'. Have multi series if build in 'wide_multivariate'
+            # Add a new field of "patch_size" to data dict
+            # randomly choose from range based on frequency
             GetPatchSize(
                 min_time_patches=2,
                 target_field="target",
-                patch_sizes=self.module.patch_sizes,
+                patch_sizes=self.module.patch_sizes,   # (64,)  self.module.patch_sizes
                 patch_size_constraints=FixedPatchSizeConstraints(patch_size),
                 offset=True,
             )
+
+            # For each sample, crop the [prediction_length context_length] region of sequence
+            # The region is computed based on its 'window' (window id)
             + EvalCrop(
                 offset,
                 distance,
@@ -427,6 +496,10 @@ class MoiraiFinetune(L.LightningModule):
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
             )
+
+            # Turn variables in fields as nparray. Then pack the fields.
+            # Make no difference for wide data. Then 'target' is nparray:  (1, L)
+            # For wide_mts data, pack the series into MTS. Then 'target' is a nparray: (C, L)
             + PackFields(
                 output_field="target",
                 fields=("target",),
@@ -436,28 +509,42 @@ class MoiraiFinetune(L.LightningModule):
                 fields=tuple(),
                 optional_fields=("past_feat_dynamic_real",),
             )
+
+            # Pad along the time dimension so that can get a multiple of patches
+            # Padded values are Nan.
             + EvalPad(
-                prediction_pad=-prediction_length % patch_size,
+                prediction_pad=-prediction_length % patch_size,  # -: compute how much to pad
                 context_pad=-context_length % patch_size,
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
             )
+
+            # Add observed_mask. Nan is False. Same shape of target.
             + AddObservedMask(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
                 observed_mask_field="observed_mask",
                 collection_type=dict,
             )
+
+            # Impute Nan
             + ImputeTimeSeries(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
                 imputation_method=DummyValueImputation(value=0.0),
             )
+
+            # Patchify TS record into patches.
+            # No matter used patch_size, pad all the patches to max_patch_size!
+            # Shape of patchified fields: (1, n_patch, max_patch_size)
             + Patchify(
                 max_patch_size=max(self.module.patch_sizes),
                 fields=("target", "observed_mask"),
                 optional_fields=("past_feat_dynamic_real",),
             )
+
+            # ToDo: What does it mean? Why set randomize=True?
+            #  It seems that add a random number to each data_entry. No matter the Variate.
             + AddVariateIndex(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
@@ -467,6 +554,8 @@ class MoiraiFinetune(L.LightningModule):
                 randomize=True,
                 collection_type=dict,
             )
+
+            # Add Time_id for each patch. These ids are in order.
             + AddTimeIndex(
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
@@ -474,20 +563,31 @@ class MoiraiFinetune(L.LightningModule):
                 expected_ndim=3,
                 collection_type=dict,
             )
+
+            # Todo: mask_length?
+            #  Now it is the length of padding in prediction.
             + EvalMaskedPrediction(
-                mask_length=-prediction_length % patch_size,
+                # mask_length=-prediction_length % patch_size,
+                mask_length=prediction_length // patch_size,  # num of patches for prediction?
                 target_field="target",
                 truncate_fields=("variate_id", "time_id", "observed_mask"),
                 optional_truncate_fields=("past_feat_dynamic_real",),
                 prediction_mask_field="prediction_mask",
                 expected_ndim=3,
             )
+            # Extend prediction_mask for "past_feat_dynamic_real" (If it exists)
+            # set another prediction mask with all False for it in field "prediction_mask".
+            # So there will be 2 items in field "prediction_mask".
             + ExtendMask(
                 fields=tuple(),
                 optional_fields=("past_feat_dynamic_real",),
                 mask_field="prediction_mask",
                 expected_ndim=3,
             )
+            # Turn item in field into nparray. Flat multiple variates into a sequence.
+            # If feat=False, field should be    then output shape is (num_patch, )
+            # If feat=True, field should be     then output shape is (num_patch, feat). feat represents max_patch_size here.
+            # * is the number of patches
             + FlatPackCollection(
                 field="variate_id",
                 feat=False,
@@ -496,6 +596,7 @@ class MoiraiFinetune(L.LightningModule):
                 field="time_id",
                 feat=False,
             )
+            # If "past_feat_dynamic_real" exist, * will be 2* num_patches?
             + FlatPackCollection(
                 field="prediction_mask",
                 feat=False,
@@ -504,15 +605,23 @@ class MoiraiFinetune(L.LightningModule):
                 field="observed_mask",
                 feat=True,
             )
+            # Seems pack target and past_feat_dynamic_real, and set it as target.
+            # If "past_feat_dynamic_real" exist, * will be 2* num_patches?
             + FlatPackFields(
                 output_field="target",
                 fields=("target",),
                 optional_fields=("past_feat_dynamic_real",),
                 feat=True,
             )
+            # Transform patch_size from int to a sequence (num_patches, patch_size).
+            # For each sample, patch_size is the same.
             + SequencifyField(field="patch_size", target_field="target")
+            # Only use self.seq_fields for a sample (dict).
+            # Discard fields: item_id, freq, start, which are created by building datasets.
             + SelectFields(fields=list(self.seq_fields))
         )
-
+    # field 'sample_id' is added after getting a batch of data.
+    # It indicates the padding patches which are padded to the max_patch_num in a batch.
+    # Therefore, it is not sample-wise transformation, Not in the transformation chain.
 
 class MoiraiLinearProbe(MoiraiFinetune): ...

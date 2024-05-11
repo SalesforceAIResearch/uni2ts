@@ -1,0 +1,4 @@
+_target_: builtins.dict
+prediction_length: 96
+context_length: 4000
+patch_size: 128  # auto

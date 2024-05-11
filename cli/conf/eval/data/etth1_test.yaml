@@ -1,7 +1,11 @@
 _target_: uni2ts.eval_util.data.get_custom_eval_dataset
 dataset_name: ETTh1_eval
-offset: 14400
-windows: 2785
+
+offset: 11520  # Same as _lsf_dataset.py
+windows: 2785  # Same as _lsf_dataset.py
+
+#offset: 14400  # finetune val's offset + finetune val's eval_length?
+#windows: 2785  # How to compute? Based on the whole TS length, windows, distance and prediction_length
 distance: 1
 prediction_length: 96
 mode: null

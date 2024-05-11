@@ -107,6 +107,10 @@ class PackCollate(Collate):
             [len(sample[self.target_field]) <= self.max_length for sample in batch]
         ), f"Sample length must be less than or equal to max_length ({self.max_length})"
 
+        # Add field 'sample_id', indicating id for the samples in each packed group/bin (1 item in forward's batch)
+        # For each bin, its sample_id starts from 1, ends at the max number samples in it.
+        # For patches padded in the end, their sample_id is 0.
+        # Also pad the other fields with 0.
         packed_batch, bin_spaces = self.first_fit_decreasing_bin_packing(batch)
         sample_id = self.get_sample_id(packed_batch, bin_spaces)
         merged_batch = self.merge_batch(packed_batch, bin_spaces) | dict(
@@ -116,12 +120,13 @@ class PackCollate(Collate):
 
     def first_fit_decreasing_bin_packing(
         self,
-        batch: list[Sample],
+        batch: list[Sample],  # list of dict
     ) -> tuple[list[list[Sample]], Int[np.ndarray, "batch"]]:
+        # Sort the batch by decreasing sequence length
         batch = sorted(
             batch, key=lambda sample: len(sample[self.target_field]), reverse=True
         )
-        bin_spaces: Int[np.ndarray, "batch"] = np.full(len(batch), self.max_length)
+        bin_spaces: Int[np.ndarray, "batch"] = np.full(len(batch), self.max_length)  # 2 args are shape and fill_value
         packed_batch: list[list[Sample]] = [[]]
 
         for sample in batch:
@@ -272,7 +277,7 @@ class _BatchedSampleIterator:
     batch_size: int
     drop_last: bool
     fill_last: bool
-    pad_func_map: dict[str, Callable[[Sequence[int], np.dtype], np.ndarray]]
+    pad_func_map: Optional[dict[str, Callable[[Sequence[int], np.dtype], np.ndarray]]]=None
 
     def __post_init__(self):
         self.queue = BatchedSampleQueue()
@@ -320,8 +325,16 @@ class _BatchedSampleIterator:
                 return False
         return True
 
+pad_func_map: dict[str, Callable[[Sequence[int], np.dtype], np.ndarray]] = {
+    "target": np.zeros,
+    "observed_mask": np.zeros,
+    "time_id": np.zeros,
+    "variate_id": np.zeros,
+    "prediction_mask": np.zeros,
+    "patch_size": np.zeros,
+}
 
-class DataLoader:
+class DataLoader:  # Used in Pretrain and Finetune.
     def __init__(
         self,
         dataset: Dataset,
@@ -345,7 +358,7 @@ class DataLoader:
 
         self.dataloader = TorchDataLoader(
             dataset=dataset,
-            batch_size=int(batch_size * batch_size_factor),
+            batch_size=int(batch_size * batch_size_factor),  # number of samples (unpacked) for a mini batch
             shuffle=shuffle,
             sampler=sampler,
             num_workers=num_workers,
@@ -356,7 +369,7 @@ class DataLoader:
             prefetch_factor=prefetch_factor if num_workers > 0 else None,
             persistent_workers=persistent_workers and num_workers > 0,
         )
-        self.batch_size = batch_size
+        self.batch_size = batch_size  # number of packed samples/bins in a mini batch (bs in forward)
         self.cycle = cycle
         self.num_batches_per_epoch = num_batches_per_epoch
         self.collate_fn = collate_fn
@@ -376,7 +389,7 @@ class DataLoader:
                 batch_size=self.batch_size,
                 drop_last=self.drop_last,
                 fill_last=self.fill_last,
-                pad_func_map=self.collate_fn.pad_func_map,
+                pad_func_map=pad_func_map if self.collate_fn is None else self.collate_fn.pad_func_map,  # self.collate_fn.pad_func_map
             )
         return itertools.islice(self.iterator, self.num_batches_per_epoch)
 

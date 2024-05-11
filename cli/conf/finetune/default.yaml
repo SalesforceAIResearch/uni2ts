@@ -34,7 +34,7 @@ trainer:
     - _target_: lightning.pytorch.callbacks.EarlyStopping
       monitor: val_loss
       min_delta: 0.0
-      patience: 3
+      patience: 3  # 3
       mode: min
       strict: false
       verbose: True
@@ -45,10 +45,10 @@ trainer:
   gradient_clip_algorithm: norm
 train_dataloader:
   _target_: uni2ts.data.loader.DataLoader
-  batch_size: 64
+  batch_size: 32  # 128
   batch_size_factor: 2.0
   cycle: true
-  num_batches_per_epoch: 100
+  num_batches_per_epoch: 5  # 100
   shuffle: true
   num_workers: 11
   collate_fn:
@@ -64,7 +64,7 @@ train_dataloader:
   persistent_workers: true
 val_dataloader:
   _target_: uni2ts.data.loader.DataLoader
-  batch_size: 64
+  batch_size: 64  # 128
   batch_size_factor: 2.0
   cycle: false
   num_batches_per_epoch: null

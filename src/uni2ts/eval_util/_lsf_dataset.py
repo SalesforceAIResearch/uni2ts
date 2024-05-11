@@ -34,13 +34,13 @@ class LSFDataset:
         else:
             raise ValueError(f"Unknown dataset name: {dataset_name}")
 
-        if mode == "S":
+        if mode == "S":  # Single to Single
             self.target_dim = 1
             self.past_feat_dynamic_real_dim = 0
-        elif mode == "M":
+        elif mode == "M":  # Multi to Multi
             self.target_dim = self.data.shape[-1]
             self.past_feat_dynamic_real_dim = 0
-        elif mode == "MS":
+        elif mode == "MS":  # Multi to Single
             self.target_dim = 1
             self.past_feat_dynamic_real_dim = self.data.shape[-1] - 1
         else:
@@ -77,11 +77,13 @@ class LSFDataset:
     def _load_etth(self):
         df = pd.read_csv(
             os.path.join(env.LSF_PATH, f"ETT-small/{self.dataset_name}.csv")
-        )
+        )  # (time , 8), First column is date.
 
         train_length = 8640
         val_length = 2880
         test_length = 2880
+
+        # Discard date column. Normalize the whole time series based on the train set's mean and std
         data = self.scale(df[df.columns[1:]], 0, train_length).to_numpy()
         if self.split == "train":
             self.data = data[:train_length]

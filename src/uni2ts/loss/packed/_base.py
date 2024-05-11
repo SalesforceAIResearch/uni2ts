@@ -67,16 +67,20 @@ class PackedLoss(abc.ABC):
         sample_id: Optional[Int[torch.Tensor, "*batch seq_len"]],
         variate_id: Optional[Int[torch.Tensor, "*batch seq_len"]],
     ) -> Float[torch.Tensor, ""]:
+        # (bs, seq_len, sen_len). If i and j patches are from the same var and sample, then (i,j) is Ture
         id_mask = torch.logical_and(
             torch.eq(sample_id.unsqueeze(-1), sample_id.unsqueeze(-2)),
             torch.eq(variate_id.unsqueeze(-1), variate_id.unsqueeze(-2)),
         )
+        # (bs, seq_len, #dim) Observed prediction tokens are 1s
         mask = prediction_mask.unsqueeze(-1) * observed_mask
+
+        # For each patch, compute the total observed tokens from pred patches within the same variate and sample. (bs, P, 1)
         tobs = reduce(
             id_mask
             * reduce(
                 mask,
-                "... seq dim -> ... 1 seq",
+                "... seq dim -> ... 1 seq",   # How many observed tokens in prediction range for each patch
                 "sum",
             ),
             "... seq1 seq2 -> ... seq1 1",

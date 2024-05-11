@@ -95,8 +95,8 @@ def get_lsf_val_dataset(
     _, test_template = split(dataset, offset=-lsf_dataset.length)
     test_data = test_template.generate_instances(
         prediction_length,
-        windows=lsf_dataset.length - prediction_length + 1,
-        distance=1,
+        windows=lsf_dataset.length - prediction_length + 1,  # number of windows/samples in test data
+        distance=1,  # distance between windows are 1. That's why windows are computed as above.
     )
     metadata = MetaData(
         freq=lsf_dataset.freq,
@@ -111,7 +111,7 @@ def get_lsf_val_dataset(
 def get_lsf_test_dataset(
     dataset_name: str,
     prediction_length: int = 96,
-    mode: str = "S",
+    mode: str = "S",  # S: single-to-single; M: multi-to-multi; MS: multi-to-single
 ) -> tuple[TestData, MetaData]:
     lsf_dataset = LSFDataset(dataset_name, mode=mode, split="test")
     dataset = _FileDataset(
@@ -120,12 +120,12 @@ def get_lsf_test_dataset(
     _, test_template = split(dataset, offset=-lsf_dataset.length)
     test_data = test_template.generate_instances(
         prediction_length,
-        windows=lsf_dataset.length - prediction_length + 1,
-        distance=1,
+        windows=lsf_dataset.length - prediction_length + 1,  # number of windows/samples in test data
+        distance=1,  # distance between windows are 1. That's why windows are computed as above.
     )
     metadata = MetaData(
         freq=lsf_dataset.freq,
-        target_dim=lsf_dataset.target_dim,
+        target_dim=lsf_dataset.target_dim,  # Determined by 'mode'
         prediction_length=prediction_length,
         past_feat_dynamic_real_dim=lsf_dataset.past_feat_dynamic_real_dim,
         split="test",
@@ -141,7 +141,7 @@ def get_custom_eval_dataset(
     prediction_length: int,
     mode: None = None,
 ) -> tuple[TestData, MetaData]:
-    hf_dataset = HFDataset(dataset_name)
+    hf_dataset = HFDataset(dataset_name)  # Built with the 1st manner in his example.
     dataset = _FileDataset(
         hf_dataset, freq=hf_dataset.freq, one_dim_target=hf_dataset.target_dim == 1
     )
@@ -149,11 +149,11 @@ def get_custom_eval_dataset(
     test_data = test_template.generate_instances(
         prediction_length,
         windows=windows,
-        distance=distance,
+        distance=distance,  # distances between windows
     )
     metadata = MetaData(
         freq=hf_dataset.freq,
-        target_dim=hf_dataset.target_dim,
+        target_dim=hf_dataset.target_dim,  # based on how the dataset is built.
         prediction_length=prediction_length,
         split="test",
     )

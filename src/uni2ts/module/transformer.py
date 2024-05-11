@@ -103,12 +103,8 @@ class TransformerEncoder(nn.Module):
         use_qk_norm: bool = True,
         var_attn_bias_layer: Optional[Callable[[int, int, int], AttentionBias]] = None,
         time_attn_bias_layer: Optional[Callable[[int, int, int], AttentionBias]] = None,
-        var_qk_proj_layer: Optional[
-            Callable[[int, int, int], QueryKeyProjection]
-        ] = None,
-        time_qk_proj_layer: Optional[
-            Callable[[int, int, int], QueryKeyProjection]
-        ] = None,
+        var_qk_proj_layer: Optional[Callable[[int, int, int], QueryKeyProjection]] = None,
+        time_qk_proj_layer: Optional[Callable[[int, int, int], QueryKeyProjection]] = None,
         shared_var_attn_bias: bool = False,
         shared_time_attn_bias: bool = False,
         shared_var_qk_proj: bool = False,

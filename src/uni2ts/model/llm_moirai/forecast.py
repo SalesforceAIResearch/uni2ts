@@ -13,11 +13,23 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+from transformers import (
+    LlamaConfig,
+    LlamaModel,
+    LlamaTokenizer,
+    GPT2Config,
+    GPT2Model,
+    GPT2Tokenizer,
+    BertConfig,
+    BertModel,
+    BertTokenizer
+)
+
 import math
 from contextlib import contextmanager
 from copy import deepcopy
 from typing import Any, Generator, Optional
-
+from torch import nn
 import lightning as L
 import numpy as np
 import torch
@@ -38,7 +50,8 @@ from torch.distributions import Distribution
 from uni2ts.common.torch_util import safe_div
 from uni2ts.loss.packed import PackedNLLLoss as _PackedNLLLoss
 
-from .module import MoiraiModule
+from uni2ts.model.moirai.module import MoiraiModule
+from uni2ts.model.llm_moirai.finetune import get_data_description, calculate_lags
 
 
 class SampleNLLLoss(_PackedNLLLoss):
@@ -69,7 +82,7 @@ class SampleNLLLoss(_PackedNLLLoss):
         return (loss * mask).sum(dim=(-1, -2))
 
 
-class MoiraiForecast(L.LightningModule):
+class LlmMoiraiForecast(L.LightningModule):
     """
     Moirai for forecasting. Load the ckpt from fine-tuning or pre-training.
     """
@@ -77,6 +90,9 @@ class MoiraiForecast(L.LightningModule):
     def __init__(
         self,
         module_kwargs: dict[str, Any],
+        llm_kwargs: dict[str, Any],
+        task_kwargs: dict[str, Any],
+        data: str,
         prediction_length: int,
         target_dim: int,                     # Get from meta data of test dataset
         feat_dynamic_real_dim: int,
@@ -88,37 +104,156 @@ class MoiraiForecast(L.LightningModule):
         super().__init__()
         self.save_hyperparameters()  # PL: save all the hyperparameters passed to init into self.hparams
         self.module = MoiraiModule(**module_kwargs)
+        self.d_llm = llm_kwargs['d_llm']
+        self.llm_layers = llm_kwargs['llm_layers']
+        self.llm_model = self._set_llm_model(llm_kwargs['llm_model'])  # LLM is frozen
+        self.llm_tokenizer = self._set_llm_tokenizer(llm_kwargs['llm_model'])
+        if isinstance(self.hparams.patch_size, int):
+            self.projector = nn.Linear(self.d_llm, patch_size)
+        else:
+            self.projector = nn.ModuleList([nn.Linear(self.d_llm, ps) for ps in self.module.patch_sizes])
         self.per_sample_loss_func = SampleNLLLoss()
+        self.data_description = get_data_description(data)
 
-    @contextmanager
-    def hparams_context(
-        self,
-        prediction_length: Optional[int] = None,
-        target_dim: Optional[int] = None,
-        feat_dynamic_real_dim: Optional[int] = None,
-        past_feat_dynamic_real_dim: Optional[int] = None,
-        context_length: Optional[int] = None,
-        patch_size: Optional[int | str] = None,
-        num_samples: Optional[int] = None,
-    ) -> Generator["MoiraiForecast", None, None]:
-        kwargs = {
-            "prediction_length": prediction_length,
-            "target_dim": target_dim,
-            "feat_dynamic_real_dim": feat_dynamic_real_dim,
-            "past_feat_dynamic_real_dim": past_feat_dynamic_real_dim,
-            "context_length": context_length,
-            "patch_size": patch_size,
-            "num_samples": num_samples,
-        }
-        old_hparams = deepcopy(self.hparams)
-        for kw, arg in kwargs.items():
-            if arg is not None:
-                self.hparams[kw] = arg
+    def _set_llm_model(self, llm_model):
+        """
+        Adapt from https://github.com/KimMeen/Time-LLM/blob/main/models/TimeLLM.py
+        """
 
-        yield self
+        if llm_model == 'LLAMA':
+            self.llama_config = LlamaConfig.from_pretrained('huggyllama/llama-7b')
+            self.llama_config.num_hidden_layers = self.llm_layers
+            self.llama_config.output_attentions = True
+            self.llama_config.output_hidden_states = True
+            try:
+                llm_model = LlamaModel.from_pretrained(
+                    'huggyllama/llama-7b',
+                    trust_remote_code=True,
+                    local_files_only=True,
+                    config=self.llama_config,
+                    attn_implementation="eager",
+                    # load_in_4bit=True
+                )
+            except EnvironmentError:  # downloads model from HF is not already done
+                print("Local model files not found. Attempting to download...")
+                llm_model = LlamaModel.from_pretrained(
+                    'huggyllama/llama-7b',
+                    trust_remote_code=True,
+                    local_files_only=False,
+                    config=self.llama_config,
+                    attn_implementation="eager",
+                    # load_in_4bit=True
+                )
 
-        for kw in kwargs:
-            self.hparams[kw] = old_hparams[kw]
+        elif llm_model == 'GPT2':
+            self.gpt2_config = GPT2Config.from_pretrained('openai-community/gpt2')
+            self.gpt2_config.num_hidden_layers = self.llm_layers
+            self.gpt2_config.output_attentions = True
+            self.gpt2_config.output_hidden_states = True
+            try:
+                llm_model = GPT2Model.from_pretrained(
+                    'openai-community/gpt2',
+                    trust_remote_code=True,
+                    local_files_only=True,
+                    config=self.gpt2_config,
+                )
+            except EnvironmentError:  # downloads model from HF is not already done
+                print("Local model files not found. Attempting to download...")
+                llm_model = GPT2Model.from_pretrained(
+                    'openai-community/gpt2',
+                    trust_remote_code=True,
+                    local_files_only=False,
+                    config=self.gpt2_config,
+                )
+
+        elif llm_model == 'BERT':
+            self.bert_config = BertConfig.from_pretrained('google-bert/bert-base-uncased')
+            self.bert_config.num_hidden_layers = self.llm_layers
+            self.bert_config.output_attentions = True
+            self.bert_config.output_hidden_states = True
+            try:
+                llm_model = BertModel.from_pretrained(
+                    'google-bert/bert-base-uncased',
+                    trust_remote_code=True,
+                    local_files_only=True,
+                    config=self.bert_config,
+                )
+            except EnvironmentError:  # downloads model from HF is not already done
+                print("Local model files not found. Attempting to download...")
+                llm_model = BertModel.from_pretrained(
+                    'google-bert/bert-base-uncased',
+                    trust_remote_code=True,
+                    local_files_only=False,
+                    config=self.bert_config,
+                )
+        else:
+            raise Exception('LLM model is not defined')
+
+        # Freeze LLM's parameters
+        for param in llm_model.parameters():
+            param.requires_grad = False
+
+        return llm_model
+
+    def _set_llm_tokenizer(self, llm_model):
+        """
+        Adapt from https://github.com/KimMeen/Time-LLM/blob/main/models/TimeLLM.py
+        """
+
+        if llm_model == 'LLAMA':
+            try:
+                tokenizer = LlamaTokenizer.from_pretrained(
+                    'huggyllama/llama-7b',
+                    trust_remote_code=True,
+                    local_files_only=True
+                )
+            except EnvironmentError:  # downloads the tokenizer from HF if not already done
+                print("Local tokenizer files not found. Atempting to download them..")
+                tokenizer = LlamaTokenizer.from_pretrained(
+                    'huggyllama/llama-7b',
+                    trust_remote_code=True,
+                    local_files_only=False
+                )
+
+        elif llm_model == 'GPT2':
+            try:
+                tokenizer = GPT2Tokenizer.from_pretrained(
+                    'openai-community/gpt2',
+                    trust_remote_code=True,
+                    local_files_only=True
+                )
+            except EnvironmentError:  # downloads the tokenizer from HF if not already done
+                print("Local tokenizer files not found. Atempting to download them..")
+                tokenizer = GPT2Tokenizer.from_pretrained(
+                    'openai-community/gpt2',
+                    trust_remote_code=True,
+                    local_files_only=False
+                )
+        elif llm_model == 'BERT':
+            try:
+                tokenizer = BertTokenizer.from_pretrained(
+                    'google-bert/bert-base-uncased',
+                    trust_remote_code=True,
+                    local_files_only=True
+                )
+            except EnvironmentError:  # downloads the tokenizer from HF if not already done
+                print("Local tokenizer files not found. Atempting to download them..")
+                tokenizer = BertTokenizer.from_pretrained(
+                    'google-bert/bert-base-uncased',
+                    trust_remote_code=True,
+                    local_files_only=False
+                )
+        else:
+            raise Exception('LLM model is not defined')
+
+        if tokenizer.eos_token:
+            tokenizer.pad_token = tokenizer.eos_token
+        else:
+            pad_token = '[PAD]'
+            tokenizer.add_special_tokens({'pad_token': pad_token})
+            tokenizer.pad_token = pad_token
+
+        return tokenizer
 
     def create_predictor(
         self,
@@ -146,6 +281,7 @@ class MoiraiForecast(L.LightningModule):
             time_series_fields=ts_fields,
             past_time_series_fields=past_ts_fields,
         )
+
         return PyTorchPredictor(
             input_names=self.prediction_input_names,
             prediction_net=self,
@@ -257,12 +393,8 @@ class MoiraiForecast(L.LightningModule):
         past_observed_feat_dynamic_real: Optional[Float[torch.Tensor, "batch past_time past_feat"]] = None,
         num_samples: Optional[int] = None,
     ) -> Float[torch.Tensor, "batch sample future_time *tgt"]:
-        """
-        Get called in PytorchPredictor's predict_to_numpy.
-        """
-        # ToDo: Why 'auto' needs to define self.past_length like that?
-        #  I posit that 'auto' is used in get_lsf_val_dataset for hparams tuning?
-        #  In test data, use the best patch size directly.  But how to tune select context length?
+
+        # ToDo: For now we don't use patch_size == auto
         if self.hparams.patch_size == "auto":
             val_loss = []
             preds = []
@@ -355,7 +487,7 @@ class MoiraiForecast(L.LightningModule):
                 self.hparams.patch_size, preds, past_target.shape[-1]
             )
 
-    def _val_loss(  # Only be used when patch_size is 'auto'
+    def _val_loss(  # ToDo: We don't use patch_size == auto for now.
         self,
         patch_size: int,
         target: Float[torch.Tensor, "batch time tgt"],
@@ -442,6 +574,78 @@ class MoiraiForecast(L.LightningModule):
             past_observed_feat_dynamic_real=past_observed_feat_dynamic_real,
         )
 
+        # For each TS in the batch, generate a prompt
+        prompt = self._get_sample_prompt(target, observed_mask, prediction_mask)
+
+        #  Get LLM reprs of prompt.
+        prompt = self.llm_tokenizer(prompt, return_tensors="pt", padding=True, truncation=True, max_length=2048)
+        prompt = prompt.to(self.llm_model.device)
+        prompt_reprs = self.llm_model(input_ids=prompt.input_ids,
+                                      attention_mask=prompt.attention_mask).last_hidden_state  # (bs, num_prompt_patches, d_llm)
+
+        # ToDo: Add a Q-former to reduce prompt length to a fixed length!
+        #  Samples from different batches have different prompt length.
+
+        # Use projector to map r_p to e_p. (bs, num_prompt_patches, patch_size)
+        if isinstance(self.hparams.patch_size, int):
+            prompt_prefix = self.projector(prompt_reprs)
+        else:
+            # Todo: Use the specific patch_size for each sample...
+            prompt_prefix = self.projector[patch_size](prompt_reprs)
+
+        batch_size = prompt_prefix.size(0)
+        num_prompt_tokens = prompt_prefix.size(1)
+
+        # Prepend prompt, modify the masks and ids.
+
+        #  Pad last dim of prompt_prefix to max_patch_size.
+        padded_prompt_prefix = torch.zeros((prompt_prefix.size(0), prompt_prefix.size(1), max(self.module.patch_sizes)),
+                                           dtype=prompt_prefix.dtype,
+                                           device=target.device)
+        padded_prompt_prefix[:, :, :prompt_prefix.size(2)] = prompt_prefix  # (bs, num_prompt_patches, max_patch_size)
+
+        #  First patch of each sample starts with non-observed values due to padding.
+        #  Can we directly prepend prompt to target? Then that patch will be [True, True, False, ..., True, ...]
+        #  Time Series is cut into separated segments by the mask... Not consecutive.
+        #  Can! Not necessary to handle it. It is common for patching.
+        prompt_observed_mask = torch.zeros((prompt_prefix.size(0), prompt_prefix.size(1), max(self.module.patch_sizes)),
+                                           dtype=observed_mask.dtype,
+                                           device=observed_mask.device)
+        prompt_observed_mask[:, :, :prompt_prefix.size(2)] = True
+
+        target = torch.cat([padded_prompt_prefix, target], dim=1)
+        observed_mask = torch.cat([prompt_observed_mask, observed_mask], dim=1)
+
+        # Each item is an individual sample and none of patches is completely padded, so all sample_ids are ones.
+        sample_id = torch.cat(
+            [torch.ones((batch_size, num_prompt_tokens), dtype=sample_id.dtype, device=sample_id.device), sample_id],
+            dim=1
+        )
+
+        # Todo: For uni-channel are as below. How to deal with flatten multi-channel? prompt as a new variate?
+        # Treat prompt patches as TS patches, so we need to add original time_id by num_prompt_patches.
+        # Then concat with [0,..., num_prompt_patches].
+        # No Sequence packing, so no worry about the ending patches are padded and with time id of zeros.
+        time_id = torch.cat(
+            [torch.arange(0, num_prompt_tokens, dtype=time_id.dtype, device=time_id.device).repeat(time_id.size(0), 1),
+             time_id + num_prompt_tokens],
+            dim=1
+        )
+
+        # ToDo: For uni-channel, duplicate. For flatten multi-channel, create a new variate.
+        #  Cannot be the same as the ones in exsisting variates. Need to in the max_dim range.
+        variate_id = repeat(
+            variate_id[:, 0],
+            'batch -> batch seq_len',
+            seq_len=variate_id.shape[1] + num_prompt_tokens
+        )
+
+        prediction_mask = torch.cat(
+            [torch.zeros((batch_size, num_prompt_tokens), dtype=prediction_mask.dtype, device=prediction_mask.device),
+             prediction_mask],
+            dim=1
+        )
+
         # get predictions
         distr = self.module(
             target,
@@ -453,6 +657,52 @@ class MoiraiForecast(L.LightningModule):
             torch.ones_like(time_id, dtype=torch.long) * patch_size,
         )
         return distr
+
+    @torch.no_grad()
+    def _get_sample_prompt(self, target, observed_mask, prediction_mask):
+        prompt = []
+        for b in range(target.size(0)):
+            # Dataset Description
+            prompt_ = (
+                f"<|start_prompt|>Dataset description: {self.data_description};"
+            )
+
+            # Task description if task params are known.
+            if self.hparams.prediction_length and self.hparams.context_length:
+                prompt_ += f"Task description: forecast the next {str(self.hparams.prediction_length)} steps given the previous {str(self.hparams.context_length)} steps information; "
+
+            # Todo: Compute the statistics for each sample.
+            # In Moirai, each sample is a MTS? --> Compute channel-wise statistics.
+            # It has been flattened. Need to use variate_id to compute.
+            # Do we need to consider pad/missing values when computing statistics?
+
+            # if self.hparams.prompt_statistics:
+
+            # Mask indicating the observed tokens in context range for a sample b.
+            mask = observed_mask[b] & ~prediction_mask[b].unsqueeze(-1).expand_as(observed_mask[b])
+            valid_target = target[b][mask]  # A 1D tensor with observed context time steps
+            min_value = torch.min(valid_target).item()
+            max_value = torch.max(valid_target).item()
+            median = torch.median(valid_target).item()
+            lags = calculate_lags(valid_target)
+            trend = valid_target.diff().sum()
+
+            min_value_str = str(round(min_value, 4))
+            max_value_str = str(round(max_value, 4))
+            median_value_str = str(round(median, 4))
+            lags_values_str = str(lags.tolist())
+            prompt_ += (f"Input statistics: "
+                        f"min value {min_value_str}, "
+                        f"max value {max_value_str}, "
+                        f"median value {median_value_str}, "
+                        f"the trend of input is {'upward' if trend > 0 else 'downward'}, "
+                        f"top 5 lags are : {lags_values_str};")
+
+            prompt_ += "<|<end_prompt>|>"
+            prompt.append(prompt_)
+
+        return prompt
+
 
     @staticmethod
     def _patched_seq_pad(

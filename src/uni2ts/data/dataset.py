@@ -42,7 +42,7 @@ class SampleTimeSeriesType(Enum):
 class TimeSeriesDataset(Dataset):
     def __init__(
         self,
-        indexer: Indexer[dict[str, Any]],
+        indexer: Indexer[dict[str, Any]],  # dataset
         transform: Transformation,
         sample_time_series: SampleTimeSeriesType = SampleTimeSeriesType.NONE,
         dataset_weight: float = 1.0,
@@ -73,7 +73,7 @@ class TimeSeriesDataset(Dataset):
         return self.transform(self._flatten_data(self._get_data(idx)))
 
     @property
-    def num_ts(self) -> int:
+    def num_ts(self) -> int:  # number of time series in the built hf_dataset.
         return len(self.indexer)
 
     def __len__(self) -> int:
@@ -149,11 +149,13 @@ class EvalDataset(TimeSeriesDataset):
             indexer,
             transform,
             SampleTimeSeriesType.NONE,
-            dataset_weight=windows,
+            dataset_weight=windows,  # Weight of a Eval Dataset is its number of windows
         )
 
     def _get_data(self, idx: int) -> dict[str, Data]:
+        # idx belongs to [0, self.num_ts * windows]
+        # For an idx, compute which window and which channel is it from
         window, idx = divmod(idx, self.num_ts)
         item = self.indexer[idx]
-        item["window"] = window
+        item["window"] = window  # Window_id of the idx-th sample
         return item

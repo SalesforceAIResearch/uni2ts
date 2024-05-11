@@ -39,6 +39,11 @@ class AddVariateIndex(CollectFuncMixin, CheckArrNDimMixin, Transformation):
 
     def __call__(self, data_entry: dict[str, Any]) -> dict[str, Any]:
         self.counter = 0
+
+        # Why randomize=True? Each time dimensions is random.
+        # The variate_id is completely random...
+        # Even the samples from the same variate can have different variate_id.
+
         self.dimensions = (
             np.random.choice(self.max_dim, size=self.max_dim, replace=False)
             if self.randomize
@@ -57,7 +62,7 @@ class AddVariateIndex(CollectFuncMixin, CheckArrNDimMixin, Transformation):
     ) -> np.ndarray:
         arr = data_entry[field]
         self.check_ndim(field, arr, self.expected_ndim)
-        dim, time = arr.shape[:2]
+        dim, time = arr.shape[:2]  # dim: num of channel; time: num of patches
         if self.counter + dim > self.max_dim:
             raise ValueError(
                 f"Variate ({self.counter + dim}) exceeds maximum variate {self.max_dim}. "
@@ -100,6 +105,38 @@ class AddTimeIndex(CollectFuncMixin, CheckArrNDimMixin, Transformation):
         self.check_ndim(field, arr, self.expected_ndim)
         var, time = arr.shape[:2]
         field_seq_id = np.arange(time)
+        field_seq_id = repeat(field_seq_id, "time -> var time", var=var)
+        return field_seq_id
+
+
+@dataclass
+class AddSampleIndex(CollectFuncMixin, CheckArrNDimMixin, Transformation):
+    """
+    Add sample_id. Follow the practice in MoiraiForecast. Only used when not using sequence packing.
+    """
+
+    fields: tuple[str, ...]
+    optional_fields: tuple[str, ...] = tuple()
+    sample_id_field: str = "sample_id"
+    expected_ndim: int = 2
+    collection_type: type = list
+
+    def __call__(self, data_entry: dict[str, Any]) -> dict[str, Any]:
+
+        data_entry[self.sample_id_field] = self.collect_func(
+            self._generate_sample_id,
+            data_entry,
+            self.fields,
+            optional_fields=self.optional_fields,
+        )
+        return data_entry
+
+    def _generate_sample_id(self, data_entry: dict[str, Any], field: str) -> np.ndarray:
+        arr = data_entry[field]
+        self.check_ndim(field, arr, self.expected_ndim)
+        var, time = arr.shape[:2]
+        # If not using sequence packing, then all patches in an entry are from the same sample.
+        field_seq_id = np.ones(time)
         field_seq_id = repeat(field_seq_id, "time -> var time", var=var)
         return field_seq_id
 

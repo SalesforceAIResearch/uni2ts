@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Generator, Optional
 
 import datasets
+import numpy as np
 import pandas as pd
 from datasets import Features, Sequence, Value
 from torch.utils.data import Dataset
@@ -30,8 +31,8 @@ from uni2ts.data.dataset import EvalDataset, SampleTimeSeriesType, TimeSeriesDat
 from uni2ts.data.indexer import HuggingFaceDatasetIndexer
 from uni2ts.transform import Identity, Transformation
 
-from ._base import DatasetBuilder
-
+# from ._base import DatasetBuilder
+from uni2ts.data.builder._base import DatasetBuilder
 
 def _from_long_dataframe(
     df: pd.DataFrame,
@@ -116,6 +117,8 @@ class SimpleDatasetBuilder(DatasetBuilder):
 
     def __post_init__(self):
         self.storage_path = Path(self.storage_path)
+        self.mean = None
+        self.std = None
 
     def build_dataset(
         self,
@@ -123,19 +126,38 @@ class SimpleDatasetBuilder(DatasetBuilder):
         dataset_type: str,
         offset: int = None,
         date_offset: pd.Timestamp = None,
+        normalize: bool = False
     ):
+        """
+        Build a Hugging Face dataset based on the csv file of the entire TS dataset.
+
+        Only use the range before offset/date_offset if they are specified.
+
+        If dataset_type == 'long':
+            data must have an 'item_id' column. Treat each item's record as a data_entry.
+        If dataset_type == 'wide':
+            hf_dataset treats the whole record of each individual channel as a data_entry.
+            Number of data_entry is the same as the number of channels/variates.
+        If dataset_type == 'wide_multivariate':
+            All the channels/variates will be treated as a whole. 'target' is a MTS.
+            Only 1 entry in hf_dataset.
+        """
+
         assert offset is None or date_offset is None, (
             "One or neither offset and date_offset must be specified, but not both. "
             f"Got offset: {offset}, date_offset: {date_offset}"
         )
 
-        df = pd.read_csv(file, index_col=0, parse_dates=True)
+        df = pd.read_csv(file, index_col=0, parse_dates=True)  # Use date as index
 
         if offset is not None:
             df = df.iloc[:offset]
 
         if date_offset is not None:
             df = df[df.index <= date_offset]
+
+        if normalize:
+            df = self.scale(df, 0, len(df.index))
 
         if dataset_type == "long":
             example_gen_func, features = _from_long_dataframe(df)
@@ -171,6 +193,12 @@ class SimpleDatasetBuilder(DatasetBuilder):
             sample_time_series=self.sample_time_series,
         )
 
+    def scale(self, data, start, end):
+        train = data[start:end]
+        self.mean = train.mean(axis=0)
+        self.std = train.std(axis=0)
+        return (data - self.mean) / self.std
+
 
 @dataclass
 class SimpleEvalDatasetBuilder(DatasetBuilder):
@@ -186,8 +214,14 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
     def __post_init__(self):
         self.storage_path = Path(self.storage_path)
 
-    def build_dataset(self, file: Path, dataset_type: str):
+    def build_dataset(self, file: Path, dataset_type: str, mean: pd.Series = None, std: pd.Series = None):
+        """
+        Same as above. But no offset. Save the entire dataset.
+        """
         df = pd.read_csv(file, index_col=0, parse_dates=True)
+
+        if mean is not None and std is not None:
+            df = (df - mean) / std
 
         if dataset_type == "long":
             example_gen_func, features = _from_long_dataframe(df)
@@ -210,6 +244,9 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
     def load_dataset(
         self, get_transform: Callable[[int, int, int, int, int], Transformation]
     ) -> Dataset:
+        """
+        EvalDataset, which specifies windows, distance, prediction_length, context_length, patch_size.
+        """
         return EvalDataset(
             self.windows,
             HuggingFaceDatasetIndexer(
@@ -271,15 +308,24 @@ if __name__ == "__main__":
         type=str,
         default=None,
     )
+    parser.add_argument("--normalize", action="store_true")
     args = parser.parse_args()
 
-    SimpleDatasetBuilder(dataset=args.dataset_name).build_dataset(
+    # Create training dataset
+    # If offset/date_offset is not provided, the whole data will be used for training
+    # Otherwise, only the part before offset is used for training.
+    train_dataset_builder = SimpleDatasetBuilder(dataset=args.dataset_name)
+    train_dataset_builder.build_dataset(
         file=Path(args.file_path),
         dataset_type=args.dataset_type,
         offset=args.offset,
         date_offset=pd.Timestamp(args.date_offset) if args.date_offset else None,
+        normalize=args.normalize  # To align with LSF. Default is False
     )
 
+    # Create a validation dataset if offset/data_offset is provided.
+    # Eval dataset include the whole data.
+    # 'offsets' and 'windows' need to be specified in yaml.
     if args.offset is not None or args.date_offset is not None:
         SimpleEvalDatasetBuilder(
             f"{args.dataset_name}_eval",
@@ -289,4 +335,7 @@ if __name__ == "__main__":
             prediction_length=None,
             context_length=None,
             patch_size=None,
-        ).build_dataset(file=Path(args.file_path), dataset_type=args.dataset_type)
+        ).build_dataset(file=Path(args.file_path),
+                        dataset_type=args.dataset_type,
+                        mean=train_dataset_builder.mean,
+                        std=train_dataset_builder.std)
