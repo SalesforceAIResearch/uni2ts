@@ -20,7 +20,8 @@ dependencies = [
   "orjson",
   "tensorboard",
   "multiprocess",
-  "huggingface_hub",
+  "huggingface_hub>=0.23.0",
+  "safetensors",
   "datasets~=2.17.1",
   "jax[cpu]",
 ]

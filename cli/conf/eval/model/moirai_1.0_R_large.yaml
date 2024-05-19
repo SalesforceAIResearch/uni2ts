@@ -1,8 +1,7 @@
-_target_: uni2ts.model.moirai.MoiraiForecast.load_from_checkpoint
-checkpoint_path:
-  _target_: huggingface_hub.hf_hub_download
-  repo_id: Salesforce/moirai-1.0-R-large
-  filename: model.ckpt
+_target_: uni2ts.model.moirai.MoiraiForecast
+module:
+  _target_: uni2ts.model.moirai.MoiraiModule.from_pretrained
+  pretrained_model_name_or_path: Salesforce/moirai-1.0-R-large
 num_samples: 100
 patch_size: ???
 context_length: ???
