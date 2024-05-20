@@ -1,3 +1,4 @@
+# load a pytorch lightning checkpoint
 _target_: uni2ts.model.moirai.MoiraiFinetune.load_from_checkpoint
 module_kwargs:
   _target_: builtins.dict

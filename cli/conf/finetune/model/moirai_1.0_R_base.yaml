@@ -1,3 +1,4 @@
+# load a pretrained checkpoint from huggingface hub
 _target_: uni2ts.model.moirai.MoiraiFinetune
 module:
   _target_: uni2ts.model.moirai.MoiraiModule.from_pretrained
