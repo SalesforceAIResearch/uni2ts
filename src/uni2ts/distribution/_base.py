@@ -19,7 +19,7 @@ from typing import Any, Optional
 
 import torch
 from einops import rearrange
-from jaxtyping import Float, Int, PyTree
+from jaxtyping import Float, PyTree
 from torch import nn
 from torch.distributions import AffineTransform, Distribution, TransformedDistribution
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
@@ -60,7 +60,7 @@ class DistrParamProj(nn.Module):
     def __init__(
         self,
         in_features: int,
-        out_features: int | tuple[int, ...],
+        out_features: int | tuple[int, ...] | list[int],
         args_dim: PyTree[int, "T"],
         domain_map: PyTree[Callable[[torch.Tensor], torch.Tensor], "T"],
         proj_layer: Callable[..., nn.Module] = MultiOutSizeLinear,
@@ -128,7 +128,7 @@ class AffineTransformed(TransformedDistribution):
 
 
 @abstract_class_property("distr_cls")
-class DistributionOutput(abc.ABC):
+class DistributionOutput:
     distr_cls: type[Distribution] = NotImplemented
 
     def distribution(
@@ -161,7 +161,7 @@ class DistributionOutput(abc.ABC):
     def get_param_proj(
         self,
         in_features: int,
-        out_features: int | tuple[int, ...],
+        out_features: int | tuple[int, ...] | list[int],
         proj_layer: type[nn.Module] = MultiOutSizeLinear,
         **kwargs: Any,
     ) -> nn.Module:

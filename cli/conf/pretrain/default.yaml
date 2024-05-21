@@ -1,6 +1,6 @@
 hydra:
   run:
-    dir: outputs/${hydra:job.name}/${hydra:runtime.choices.model}/${hydra:runtime.choices.data}/${run_name}
+    dir: outputs/pretrain/${hydra:runtime.choices.model}/${hydra:runtime.choices.data}/${run_name}
 defaults:
   - model: ???
   - data: ???

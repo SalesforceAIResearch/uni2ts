@@ -17,9 +17,12 @@ from functools import partial
 
 import torch
 import torch.nn.functional as F
+from huggingface_hub import PyTorchModelHubMixin
+from hydra.utils import instantiate
 from jaxtyping import Bool, Float, Int
 from torch import nn
 from torch.distributions import Distribution
+from torch.utils._pytree import tree_map
 
 from uni2ts.common.torch_util import mask_fill, packed_attention_mask
 from uni2ts.distribution import DistributionOutput
@@ -34,7 +37,30 @@ from uni2ts.module.transformer import TransformerEncoder
 from uni2ts.module.ts_embed import MultiInSizeLinear
 
 
-class MoiraiModule(nn.Module):
+def encode_distr_output(
+    distr_output: DistributionOutput,
+) -> dict[str, str | float | int]:
+    def _encode(val):
+        if not isinstance(val, DistributionOutput):
+            return val
+
+        return {
+            "_target_": f"{val.__class__.__module__}.{val.__class__.__name__}",
+            **tree_map(_encode, val.__dict__),
+        }
+
+    return _encode(distr_output)
+
+
+def decode_distr_output(config: dict[str, str | float | int]) -> DistributionOutput:
+    return instantiate(config, _convert_="all")
+
+
+class MoiraiModule(
+    nn.Module,
+    PyTorchModelHubMixin,
+    coders={DistributionOutput: (encode_distr_output, decode_distr_output)},
+):
     """Contains components of Moirai to ensure implementation is identical across models"""
 
     def __init__(
@@ -42,7 +68,7 @@ class MoiraiModule(nn.Module):
         distr_output: DistributionOutput,
         d_model: int,
         num_layers: int,
-        patch_sizes: tuple[int, ...],
+        patch_sizes: tuple[int, ...],  # tuple[int, ...] | list[int]
         max_seq_len: int,
         attn_dropout_p: float,
         dropout_p: float,

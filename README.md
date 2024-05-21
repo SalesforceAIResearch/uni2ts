@@ -64,7 +64,7 @@ from gluonts.dataset.split import split
 from huggingface_hub import hf_hub_download
 
 from uni2ts.eval_util.plot import plot_single
-from uni2ts.model.moirai import MoiraiForecast
+from uni2ts.model.moirai import MoiraiForecast, MoiraiModule
 
 
 SIZE = "small"  # model size: choose from {'small', 'base', 'large'}
@@ -98,9 +98,7 @@ test_data = test_template.generate_instances(
 
 # Prepare pre-trained model by downloading model weights from huggingface hub
 model = MoiraiForecast.load_from_checkpoint(
-    checkpoint_path=hf_hub_download(
-        repo_id=f"Salesforce/moirai-1.0-R-{SIZE}", filename="model.ckpt"
-    ),
+    module=MoiraiModule.from_pretrained(f"Salesforce/moirai-1.0-R-{SIZE}"),
     prediction_length=PDT,
     context_length=CTX,
     patch_size=PSZ,
@@ -108,7 +106,6 @@ model = MoiraiForecast.load_from_checkpoint(
     target_dim=1,
     feat_dynamic_real_dim=ds.num_feat_dynamic_real,
     past_feat_dynamic_real_dim=ds.num_past_feat_dynamic_real,
-    map_location="cuda:0" if torch.cuda.is_available() else "cpu",
 )
 
 predictor = model.create_predictor(batch_size=BSZ)

@@ -1,8 +1,5 @@
-# load a pretrained checkpoint from huggingface hub
-_target_: uni2ts.model.moirai.MoiraiFinetune
-module:
-  _target_: uni2ts.model.moirai.MoiraiModule.from_pretrained
-  pretrained_model_name_or_path: Salesforce/moirai-1.0-R-base
+# load a pytorch lightning checkpoint
+_target_: uni2ts.model.moirai.MoiraiFinetune.load_from_checkpoint
 module_kwargs:
   _target_: builtins.dict
   distr_output:
@@ -31,3 +28,4 @@ beta1: 0.9
 beta2: 0.98
 num_training_steps: ${mul:${trainer.max_epochs},${train_dataloader.num_batches_per_epoch}}
 num_warmup_steps: 0
+checkpoint_path: ...
