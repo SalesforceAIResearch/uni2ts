@@ -97,7 +97,7 @@ test_data = test_template.generate_instances(
 )
 
 # Prepare pre-trained model by downloading model weights from huggingface hub
-model = MoiraiForecast.load_from_checkpoint(
+model = MoiraiForecast(
     module=MoiraiModule.from_pretrained(f"Salesforce/moirai-1.0-R-{SIZE}"),
     prediction_length=PDT,
     context_length=CTX,
