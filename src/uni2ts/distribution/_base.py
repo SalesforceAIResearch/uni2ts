@@ -79,7 +79,7 @@ class DistrParamProj(nn.Module):
                     else proj_layer(
                         in_features,
                         tuple(dim * of for of in out_features),
-                        dim,
+                        dim=dim,
                         **kwargs,
                     )
                 ),
@@ -165,7 +165,7 @@ class DistributionOutput:
         self,
         in_features: int,
         out_features: int | tuple[int, ...] | list[int],
-        proj_layer: type[nn.Module] = MultiOutSizeLinear,
+        proj_layer: Callable[..., nn.Module] = MultiOutSizeLinear,
         **kwargs: Any,
     ) -> nn.Module:
         return DistrParamProj(

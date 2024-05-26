@@ -115,7 +115,7 @@ class MultiOutSizeLinear(nn.Module):
         self,
         in_features: int,
         out_features_ls: tuple[int, ...],
-        dim: int,
+        dim: int = 1,
         bias: bool = True,
         dtype: Optional[torch.dtype] = None,
     ):

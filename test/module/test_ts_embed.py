@@ -126,7 +126,7 @@ def test_multi_out_size_linear(
     embed = MultiOutSizeLinear(
         in_features,
         out_features_ls,
-        dim,
+        dim=dim,
         bias=bias,
     )
     embed_out = embed(x, inp_ofs // dim)
