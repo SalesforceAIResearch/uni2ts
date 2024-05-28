@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 import shutil
+import string
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Generator, Optional, Type
@@ -207,4 +208,53 @@ def airpassengers_dataset_builder(
     )
     dataset_builder.build_dataset()
     yield dataset_builder, weight, repeat
+    shutil.rmtree(str(path))
+
+
+@pytest.fixture(scope="session")
+def get_wide_df(
+    tmp_path_factory, request
+) -> Generator[tuple[Path, int, int], None, None]:
+    path = tmp_path_factory.mktemp("wide_df")
+    filepath = path / "wide_df.csv"
+    num_columns: int = request.param[0]
+    num_rows: int = request.param[1]
+
+    df = pd.DataFrame(
+        index=np.datetime64("2020-01-01") + np.arange(num_rows),
+        data={
+            col: np.random.randn(num_rows)
+            for col, _ in zip(string.ascii_uppercase, range(num_columns))
+        },
+    )
+    df.to_csv(filepath)
+    yield filepath, num_columns, num_rows
+    shutil.rmtree(str(path))
+
+
+@pytest.fixture(scope="session")
+def get_long_df(
+    tmp_path_factory, request
+) -> Generator[tuple[Path, int, int], None, None]:
+    path = tmp_path_factory.mktemp("long_df")
+    filepath = path / "long_df.csv"
+    num_columns: int = request.param[0]
+    num_rows: int = request.param[1]
+
+    df = pd.DataFrame(
+        index=np.concatenate(
+            [np.datetime64("2020-01-01") + np.arange(num_rows)] * num_columns
+        ),
+        data={
+            "item_id": np.concatenate(
+                [
+                    np.asarray([col] * num_rows)
+                    for col, _ in zip(string.ascii_uppercase, range(num_columns))
+                ]
+            ),
+            "target": np.random.randn(num_columns * num_rows),
+        },
+    )
+    df.to_csv(filepath)
+    yield filepath, num_columns, num_rows
     shutil.rmtree(str(path))
