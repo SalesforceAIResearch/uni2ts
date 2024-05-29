@@ -13,6 +13,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+import math
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from typing import Any, Optional
@@ -505,7 +506,7 @@ class MoiraiFinetune(L.LightningModule):
                     collection_type=dict,
                 )
                 + EvalMaskedPrediction(
-                    mask_length=-prediction_length % patch_size,
+                    mask_length=math.ceil(prediction_length / patch_size),
                     target_field="target",
                     truncate_fields=("variate_id", "time_id", "observed_mask"),
                     optional_truncate_fields=("past_feat_dynamic_real",),
