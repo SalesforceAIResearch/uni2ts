@@ -33,6 +33,6 @@ preferred-citation:
   year: 2024
   collection-title: "Proceedings of the 41st International Conference on Machine Learning"
   conference:
-    - name: "International Conference on Machine Learning (ICML)"
-      city: Vienna
-      country: Austria
+    name: "International Conference on Machine Learning (ICML)"
+    city: Vienna
+    country: Austria
