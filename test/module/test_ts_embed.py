@@ -96,13 +96,22 @@ def test_multi_in_size_linear(
 
 @pytest.mark.parametrize("batch_shape", [tuple(), (1,), (10, 3)])
 @pytest.mark.parametrize("in_features", [64, 128, 512])
-@pytest.mark.parametrize("out_features_ls", [(10,), (10, 20, 30)])
+@pytest.mark.parametrize(
+    "out_features_ls, dim",
+    [
+        ((10,), 1),
+        ((20,), 2),
+        ((10, 20, 30), 1),
+        ((20, 40, 60), 2),
+    ],
+)
 @pytest.mark.parametrize("bias", [False, True])
 @pytest.mark.parametrize("seed", [0, 1, 2])
 def test_multi_out_size_linear(
     batch_shape: tuple[int, ...],
     in_features: int,
     out_features_ls: tuple[int, ...],
+    dim: int,
     bias: bool,
     seed: int,
 ):
@@ -117,9 +126,10 @@ def test_multi_out_size_linear(
     embed = MultiOutSizeLinear(
         in_features,
         out_features_ls,
+        dim=dim,
         bias=bias,
     )
-    embed_out = embed(x, inp_ofs)
+    embed_out = embed(x, inp_ofs // dim)
 
     # init ground truth model
     torch.manual_seed(seed)

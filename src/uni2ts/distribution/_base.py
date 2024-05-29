@@ -77,7 +77,10 @@ class DistrParamProj(nn.Module):
                     proj_layer(in_features, dim * out_features, **kwargs)
                     if isinstance(out_features, int)
                     else proj_layer(
-                        in_features, tuple(dim * of for of in out_features), **kwargs
+                        in_features,
+                        tuple(dim * of for of in out_features),
+                        dim=dim,
+                        **kwargs,
                     )
                 ),
                 args_dim,
@@ -162,7 +165,7 @@ class DistributionOutput:
         self,
         in_features: int,
         out_features: int | tuple[int, ...] | list[int],
-        proj_layer: type[nn.Module] = MultiOutSizeLinear,
+        proj_layer: Callable[..., nn.Module] = MultiOutSizeLinear,
         **kwargs: Any,
     ) -> nn.Module:
         return DistrParamProj(

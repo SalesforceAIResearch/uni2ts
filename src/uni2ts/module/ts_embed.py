@@ -115,12 +115,14 @@ class MultiOutSizeLinear(nn.Module):
         self,
         in_features: int,
         out_features_ls: tuple[int, ...],
+        dim: int = 1,
         bias: bool = True,
         dtype: Optional[torch.dtype] = None,
     ):
         super().__init__()
         self.in_features = in_features
         self.out_features_ls = out_features_ls
+        self.dim = dim
 
         self.weight = nn.Parameter(
             torch.empty(
@@ -173,7 +175,7 @@ class MultiOutSizeLinear(nn.Module):
             weight = self.weight[idx] * self.mask[idx]
             bias = self.bias[idx] if self.bias is not None else 0
             out = out + (
-                torch.eq(out_feat_size, feat_size).unsqueeze(-1)
+                torch.eq(out_feat_size, feat_size // self.dim).unsqueeze(-1)
                 * (einsum(weight, x, "out inp, ... inp -> ... out") + bias)
             )
         return out
