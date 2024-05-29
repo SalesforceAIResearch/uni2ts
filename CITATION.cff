@@ -1,6 +1,6 @@
 cff-version: 1.2.0
-title: "Unified Training of Universal Time Series Forecasting Transformers"
-message: "If you find Chronos models useful for your research, please consider citing the associated paper."
+title: Unified Training of Universal Time Series Forecasting Transformers
+message: If you find Chronos models useful for your research, please consider citing the associated paper.
 authors:
   - family-names: Woo
     given-names: Gerald
@@ -29,10 +29,10 @@ preferred-citation:
       given-names: Silvio
     - family-names: Sahoo
       given-names: Doyen
-  title: "Unified Training of Universal Time Series Forecasting Transformers"
+  title: Unified Training of Universal Time Series Forecasting Transformers
   year: 2024
-  collection-title: "Proceedings of the 41st International Conference on Machine Learning"
+  collection-title: Proceedings of the 41st International Conference on Machine Learning
   conference:
-    name: "International Conference on Machine Learning (ICML)"
+    name: International Conference on Machine Learning (ICML)
     city: Vienna
     country: Austria
