@@ -30,5 +30,9 @@ preferred-citation:
     - family-names: Sahoo
       given-names: Doyen
   title: "Unified Training of Universal Time Series Forecasting Transformers"
-  booktitle: "Proceedings of the 41st International Conference on Machine Learning"
   year: 2024
+  collection-title: "Proceedings of the 41st International Conference on Machine Learning"
+  conference:
+    - name: "International Conference on Machine Learning (ICML)"
+      city: Vienna
+      country: Austria
