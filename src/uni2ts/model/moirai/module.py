@@ -61,7 +61,9 @@ class MoiraiModule(
     PyTorchModelHubMixin,
     coders={DistributionOutput: (encode_distr_output, decode_distr_output)},
 ):
-    """Contains components of Moirai to ensure implementation is identical across models"""
+    """
+    Contains components of Moirai, to ensure implementation is identical across models.
+    """
 
     def __init__(
         self,
@@ -74,6 +76,17 @@ class MoiraiModule(
         dropout_p: float,
         scaling: bool = True,
     ):
+        """Initialization of MoiraiModule.
+
+        Args:
+            distr_output (DistributionOutput): Mixture of distribution for output.
+            d_model (int): Model dimension.
+            num_layers (int): Layer numbers.
+            patch_sizes (tuple[int, ...]): atch sizes for input and output.
+            attn_dropout_p (float): Dropout rate for attention.
+            dropout_p (float): Dropout rate.
+            scaling (bool, optional): whether to use scaler on inputs. Defaults to True.
+        """
         super().__init__()
         self.d_model = d_model
         self.num_layers = num_layers
@@ -122,6 +135,27 @@ class MoiraiModule(
         prediction_mask: Bool[torch.Tensor, "*batch seq_len"],
         patch_size: Int[torch.Tensor, "*batch seq_len"],
     ) -> Distribution:
+        """forward process for MoiraiModule.
+        Including 6 steps:
+        1. Employ scaler on target data and mask and ids.
+        2. Go through input linear layer with multiple patch sizes.
+        3. Mask the prediction window.
+        4. Go through the masked encoders.
+        5. Go through output layer with multiple patch sizes.
+        6. Make a transformation of distribution, and return it.
+
+        Args:
+            target (Float[torch.Tensor]): Input data.
+            observed_mask (Bool[torch.Tensor]): Mask on NaN numbers.
+            sample_id (Int[torch.Tensor]): Sample ids.
+            time_id (Int[torch.Tensor]): Time ids.
+            variate_id (Int[torch.Tensor]): Variate ids.
+            prediction_mask (Bool[torch.Tensor]): Mask on prediction window.
+            patch_size (Int[torch.Tensor]): Patch sizes for input and output layer.
+
+        Returns:
+            Distribution: returns a distribution
+        """
         loc, scale = self.scaler(
             target,
             observed_mask * ~prediction_mask.unsqueeze(-1),
