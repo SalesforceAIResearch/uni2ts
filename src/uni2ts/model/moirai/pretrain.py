@@ -119,19 +119,17 @@ class MoiraiPretrain(L.LightningModule):
         prediction_mask: Bool[torch.Tensor, "*batch seq_len"],
         patch_size: Int[torch.Tensor, "*batch seq_len"],
     ) -> Distribution:
-        """forward process for MoiraiPretrain, with MoiraiModule.
+        """
+        Redirects to the forward function of MoiraiModule.
 
-        Args:
-            target (Float[torch.Tensor]): Input data.
-            observed_mask (Bool[torch.Tensor]): Mask on NaN numbers.
-            sample_id (Int[torch.Tensor]): Sample ids.
-            time_id (Int[torch.Tensor]): Time ids.
-            variate_id (Int[torch.Tensor]): Variate ids.
-            prediction_mask (Bool[torch.Tensor]): Mask on prediction window.
-            patch_size (Int[torch.Tensor]): Patch sizes for input and output layer.
-
-        Returns:
-            Distribution: returns a distribution
+        :param target: input data
+        :param observed_mask: binary mask for missing values, 1 if observed, 0 otherwise
+        :param sample_id: indices indicating the sample index (for packing)
+        :param time_id: indices indicating the time index
+        :param variate_id: indices indicating the variate index
+        :param prediction_mask: binary mask for prediction horizon, 1 if part of the horizon, 0 otherwise
+        :param patch_size: patch size for each token
+        :return: predictive distribution
         """
         distr = self.module(
             target=target,
@@ -147,14 +145,12 @@ class MoiraiPretrain(L.LightningModule):
     def training_step(
         self, batch: dict[str, torch.Tensor], batch_idx: int
     ) -> torch.Tensor:
-        """One step of training on current batch, and get the training loss.
+        """
+        Implements LightningModule training_step. Logs training loss.
 
-        Args:
-            batch (dict[str, torch.Tensor]): Input batch data after multiple transformation.
-            batch_idx (int): Batch ids.
-
-        Returns:
-            torch.Tensor: Returns the loss on current batch.
+        :param batch: batched inputs
+        :param batch_idx: index of current batch
+        :return: training loss for current batch
         """
         distr = self(
             **{field: batch[field] for field in list(self.seq_fields) + ["sample_id"]}
@@ -191,10 +187,13 @@ class MoiraiPretrain(L.LightningModule):
     def validation_step(
         self, batch: dict[str, torch.Tensor], batch_idx: int, dataloader_idx: int = 0
     ) -> torch.Tensor:
-        """Returns optimizer onfiguration, including optimizer and learning-rate scheduler.
+        """
+        Implements LightningModule validation_step. Logs validation loss and additional metrics from val_metric.
 
-        Returns:
-            dict: Return the configuration.
+        :param batch:
+        :param batch_idx:
+        :param dataloader_idx:
+        :return: validation loss for current batch
         """
         distr = self(
             **{field: batch[field] for field in list(self.seq_fields) + ["sample_id"]}
@@ -271,6 +270,12 @@ class MoiraiPretrain(L.LightningModule):
         return val_loss
 
     def configure_optimizers(self) -> dict:
+        """
+        Implements LightningModule configure_optimizers which defines the configuration of optimizer and learning rate
+        scheduler.
+
+        :return: dictionary of optimizers and learning rate schedulers
+        """
         decay = set()
         no_decay = set()
 
@@ -352,26 +357,26 @@ class MoiraiPretrain(L.LightningModule):
 
     @property
     def train_transform_map(self) -> dict[str, Callable[..., Transformation]]:
-        """Default transformations on input data.
-        SampleDimension: Sample the number of variants for the current task
-        GetPatchSize: Get the patch size.
-        PatchCrop: Crop the patches.
+        """
+        Get a dictionary of Transforms, with a default Transform as defined:
+        SampleDimension: Subsample the variate dimension of a time series
+        GetPatchSize: Get patch size for a given time series
+        PatchCrop: Perform cropping on the time series
         PackFields: Pack each feature columns, including 'target' and 'past_feat_dynamic_real'.
-        AddObservedMask: Mask NaN numbers
-        ImputeTimeSeries: Fill NaN with the specified imputation method, which defaults to 0.
-        Patchify: Cut data into patches.
-        AddVariateIndex: Add variate_id
-        AddTimeIndex: Add time_id
+        AddObservedMask: Add the observed_mask feature
+        ImputeTimeSeries: Imputes missing values with 0
+        Patchify: Perform patching
+        AddVariateIndex: Add variate_id feature
+        AddTimeIndex: Add time_id feature
         MaskedPrediction: Specify the task,
             i.e., sample the total input length, as well as sample the proportion of look-back window and prediction window length.
         ExtendMask: Add an auxiliary mask.
         FlatPackCollection: Pack/Merge along 'variate_id, time_id, prediction_mask, observed_mask, and target' dimensions.
         FlatPackFields: Pack/Merge 'target'.
         SequencifyField: sequencify the 'patch_size' field.
-        SelectFields: Output the data of predefined fields!
+        SelectFields: Output the data of predefined fields
 
-        Returns:
-            dict[str, Callable[..., Transformation]]: Returns the list of sequential transformations.
+        :return: defaultdict with default Transform
         """
 
         def default_train_transform():

@@ -40,6 +40,8 @@ from uni2ts.module.ts_embed import MultiInSizeLinear
 def encode_distr_output(
     distr_output: DistributionOutput,
 ) -> dict[str, str | float | int]:
+    """Serialization function for DistributionOutput"""
+
     def _encode(val):
         if not isinstance(val, DistributionOutput):
             return val
@@ -53,6 +55,7 @@ def encode_distr_output(
 
 
 def decode_distr_output(config: dict[str, str | float | int]) -> DistributionOutput:
+    """Deserialization function for DistributionOutput"""
     return instantiate(config, _convert_="all")
 
 
@@ -63,6 +66,7 @@ class MoiraiModule(
 ):
     """
     Contains components of Moirai, to ensure implementation is identical across models.
+    Subclasses huggingface_hub.PyTorchModelHubMixin to support loading from HuggingFace Hub.
     """
 
     def __init__(
@@ -76,16 +80,15 @@ class MoiraiModule(
         dropout_p: float,
         scaling: bool = True,
     ):
-        """Initialization of MoiraiModule.
-
-        Args:
-            distr_output (DistributionOutput): Mixture of distribution for output.
-            d_model (int): Model dimension.
-            num_layers (int): Layer numbers.
-            patch_sizes (tuple[int, ...]): atch sizes for input and output.
-            attn_dropout_p (float): Dropout rate for attention.
-            dropout_p (float): Dropout rate.
-            scaling (bool, optional): whether to use scaler on inputs. Defaults to True.
+        """
+        :param distr_output: distribution output object
+        :param d_model: model hidden dimensions
+        :param num_layers: number of transformer layers
+        :param patch_sizes: sequence of patch sizes
+        :param max_seq_len: maximum sequence length for inputs
+        :param attn_dropout_p: dropout probability for attention layers
+        :param dropout_p: dropout probability for all other layers
+        :param scaling: whether to apply scaling (standardization)
         """
         super().__init__()
         self.d_model = d_model
@@ -135,26 +138,25 @@ class MoiraiModule(
         prediction_mask: Bool[torch.Tensor, "*batch seq_len"],
         patch_size: Int[torch.Tensor, "*batch seq_len"],
     ) -> Distribution:
-        """forward process for MoiraiModule.
-        Including 6 steps:
-        1. Employ scaler on target data and mask and ids.
-        2. Go through input linear layer with multiple patch sizes.
-        3. Mask the prediction window.
-        4. Go through the masked encoders.
-        5. Go through output layer with multiple patch sizes.
-        6. Make a transformation of distribution, and return it.
+        """
+        Defines the forward pass of MoiraiModule.
+        This method expects processed inputs.
 
-        Args:
-            target (Float[torch.Tensor]): Input data.
-            observed_mask (Bool[torch.Tensor]): Mask on NaN numbers.
-            sample_id (Int[torch.Tensor]): Sample ids.
-            time_id (Int[torch.Tensor]): Time ids.
-            variate_id (Int[torch.Tensor]): Variate ids.
-            prediction_mask (Bool[torch.Tensor]): Mask on prediction window.
-            patch_size (Int[torch.Tensor]): Patch sizes for input and output layer.
+        1. Apply scaling to observations
+        2. Project from observations to representations
+        3. Replace prediction window with learnable mask
+        4. Apply transformer layers
+        5. Project from representations to distribution parameters
+        6. Return distribution object
 
-        Returns:
-            Distribution: returns a distribution
+        :param target: input data
+        :param observed_mask: binary mask for missing values, 1 if observed, 0 otherwise
+        :param sample_id: indices indicating the sample index (for packing)
+        :param time_id: indices indicating the time index
+        :param variate_id: indices indicating the variate index
+        :param prediction_mask: binary mask for prediction horizon, 1 if part of the horizon, 0 otherwise
+        :param patch_size: patch size for each token
+        :return: predictive distribution
         """
         loc, scale = self.scaler(
             target,
