@@ -67,6 +67,9 @@ build-lotsa = [
   "tables",
   "subseasonal-data"
 ]
+build-kernel-synth = [
+  "sklearn",
+]
 
 [tool.hatch.version]
 path = "src/uni2ts/__about__.py"
