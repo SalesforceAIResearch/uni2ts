@@ -34,6 +34,13 @@ from uni2ts.transform import Transformation
 
 
 class SampleTimeSeriesType(Enum):
+    """
+    How to sample from the dataset.
+    - none: do not sample, return the current index.
+    - uniform: each time series sampled with equal probability
+    - proportional: each time series sampled with probability proportional to it's length
+    """
+
     NONE = "none"
     UNIFORM = "uniform"
     PROPORTIONAL = "proportional"
@@ -47,6 +54,12 @@ class TimeSeriesDataset(Dataset):
         sample_time_series: SampleTimeSeriesType = SampleTimeSeriesType.NONE,
         dataset_weight: float = 1.0,
     ):
+        """
+        :param indexer: Underlying Indexer object
+        :param transform: Transformation to apply to time series
+        :param sample_time_series: defines how a time series is obtained from the dataset
+        :param dataset_weight: multiplicative factor to apply to dataset size
+        """
         self.indexer = indexer
         self.transform = transform
         self.sample_time_series = sample_time_series
@@ -62,6 +75,11 @@ class TimeSeriesDataset(Dataset):
             raise ValueError(f"Unknown sample type {sample_time_series}")
 
     def __getitem__(self, idx: int) -> dict[str, FlattenedData]:
+        """
+        Obtain a time series from the dataset, flatten
+        :param idx: index of time series to retrieve. if sample_time_series is specified, this will be ignored.
+        :return: transformed time series data
+        """
         if idx < 0 or idx >= len(self):
             raise IndexError(
                 f"Index {idx} out of range for dataset of length {len(self)}"
@@ -74,16 +92,28 @@ class TimeSeriesDataset(Dataset):
 
     @property
     def num_ts(self) -> int:
+        """
+        Get the number of time series in the dataset
+        """
         return len(self.indexer)
 
     def __len__(self) -> int:
+        """
+        Length is the number of time series multiplied by dataset_weight
+        """
         return int(np.ceil(self.num_ts * self.dataset_weight))
 
     def _get_data(self, idx: int) -> dict[str, Data | BatchedData]:
+        """
+        Obtains time series from Indexer object
+        """
         return self.indexer[idx % self.num_ts]
 
     @staticmethod
     def _flatten_data(data: dict[str, Data]) -> dict[str, FlattenedData]:
+        """
+        Convert time series type data into a list of univariate time series
+        """
         return {
             k: (
                 [v]
@@ -95,6 +125,11 @@ class TimeSeriesDataset(Dataset):
 
 
 class MultiSampleTimeSeriesDataset(TimeSeriesDataset):
+    """
+    Samples multiple time series and stacks them into a single time series.
+    Underlying dataset should have aligned time series, meaning same start and end dates.
+    """
+
     def __init__(
         self,
         indexer: Indexer[dict[str, Any]],
@@ -105,6 +140,15 @@ class MultiSampleTimeSeriesDataset(TimeSeriesDataset):
         dataset_weight: float = 1.0,
         sampler: Sampler = get_sampler("beta_binomial", a=2, b=5),
     ):
+        """
+        :param indexer: Underlying Indexer object
+        :param transform: Transformation to apply to time series
+        :param max_ts: maximum number of time series that can be stacked together
+        :param combine_fields: fields which should be stacked
+        :param sample_time_series: defines how a time series is obtained from the dataset
+        :param dataset_weight: multiplicative factor to apply to dataset size
+        :param sampler: how to sample the other time series
+        """
         super().__init__(indexer, transform, sample_time_series, dataset_weight)
         self.max_ts = max_ts
         self.combine_fields = combine_fields
@@ -139,12 +183,20 @@ class MultiSampleTimeSeriesDataset(TimeSeriesDataset):
 
 
 class EvalDataset(TimeSeriesDataset):
+    """
+    Dataset class for validation.
+    Should be used in conjunction with Eval transformations.
+    """
+
     def __init__(
         self,
         windows: int,
         indexer: Indexer[dict[str, Any]],
         transform: Transformation,
     ):
+        """
+        :param windows: number of windows to perform evaluation on
+        """
         super().__init__(
             indexer,
             transform,

@@ -22,10 +22,27 @@ from uni2ts.common.typing import BatchedData, Data
 
 
 class Indexer(abc.ABC, Sequence):
+    """
+    Base class for all Indexers.
+
+    An Indexer is responsible for extracting data from an underlying file format.
+    """
+
     def __init__(self, uniform: bool = False):
+        """
+        :param uniform: whether the underlying data has uniform length
+        """
         self.uniform = uniform
 
     def check_index(self, idx: int | slice | Iterable[int]):
+        """
+        Check the validity of a given index.
+
+        :param idx: index to check
+        :return: None
+        :raises IndexError: if idx is out of bounds
+        :raises NotImplementedError: if idx is not a valid type
+        """
         if isinstance(idx, int):
             if idx < 0 or idx >= len(self):
                 raise IndexError(f"Index {idx} out of bounds for length {len(self)}")
@@ -48,6 +65,12 @@ class Indexer(abc.ABC, Sequence):
     def __getitem__(
         self, idx: int | slice | Iterable[int]
     ) -> dict[str, Data | BatchedData]:
+        """
+        Retrive the data from the underlying storage in dictionary format.
+
+        :param idx: index to retrieve
+        :return: underlying data with given index
+        """
         self.check_index(idx)
 
         if isinstance(idx, int):
@@ -72,9 +95,20 @@ class Indexer(abc.ABC, Sequence):
     def _getitem_iterable(self, idx: Iterable[int]) -> dict[str, BatchedData]: ...
 
     def get_uniform_probabilities(self) -> np.ndarray:
+        """
+        Obtains uniform probability distribution over all time series.
+
+        :return: uniform probability distribution
+        """
         return np.ones(len(self)) / len(self)
 
     def get_proportional_probabilities(self, field: str = "target") -> np.ndarray:
+        """
+        Obtain proportion of each time series based on number of time steps.
+
+        :param field: field name to measure time series length
+        :return: proportional probabilities
+        """
         if self.uniform:
             return self.get_uniform_probabilities()
 

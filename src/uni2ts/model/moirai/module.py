@@ -40,6 +40,8 @@ from uni2ts.module.ts_embed import MultiInSizeLinear
 def encode_distr_output(
     distr_output: DistributionOutput,
 ) -> dict[str, str | float | int]:
+    """Serialization function for DistributionOutput"""
+
     def _encode(val):
         if not isinstance(val, DistributionOutput):
             return val
@@ -53,6 +55,7 @@ def encode_distr_output(
 
 
 def decode_distr_output(config: dict[str, str | float | int]) -> DistributionOutput:
+    """Deserialization function for DistributionOutput"""
     return instantiate(config, _convert_="all")
 
 
@@ -61,7 +64,10 @@ class MoiraiModule(
     PyTorchModelHubMixin,
     coders={DistributionOutput: (encode_distr_output, decode_distr_output)},
 ):
-    """Contains components of Moirai to ensure implementation is identical across models"""
+    """
+    Contains components of Moirai, to ensure implementation is identical across models.
+    Subclasses huggingface_hub.PyTorchModelHubMixin to support loading from HuggingFace Hub.
+    """
 
     def __init__(
         self,
@@ -74,6 +80,16 @@ class MoiraiModule(
         dropout_p: float,
         scaling: bool = True,
     ):
+        """
+        :param distr_output: distribution output object
+        :param d_model: model hidden dimensions
+        :param num_layers: number of transformer layers
+        :param patch_sizes: sequence of patch sizes
+        :param max_seq_len: maximum sequence length for inputs
+        :param attn_dropout_p: dropout probability for attention layers
+        :param dropout_p: dropout probability for all other layers
+        :param scaling: whether to apply scaling (standardization)
+        """
         super().__init__()
         self.d_model = d_model
         self.num_layers = num_layers
@@ -122,6 +138,26 @@ class MoiraiModule(
         prediction_mask: Bool[torch.Tensor, "*batch seq_len"],
         patch_size: Int[torch.Tensor, "*batch seq_len"],
     ) -> Distribution:
+        """
+        Defines the forward pass of MoiraiModule.
+        This method expects processed inputs.
+
+        1. Apply scaling to observations
+        2. Project from observations to representations
+        3. Replace prediction window with learnable mask
+        4. Apply transformer layers
+        5. Project from representations to distribution parameters
+        6. Return distribution object
+
+        :param target: input data
+        :param observed_mask: binary mask for missing values, 1 if observed, 0 otherwise
+        :param sample_id: indices indicating the sample index (for packing)
+        :param time_id: indices indicating the time index
+        :param variate_id: indices indicating the variate index
+        :param prediction_mask: binary mask for prediction horizon, 1 if part of the horizon, 0 otherwise
+        :param patch_size: patch size for each token
+        :return: predictive distribution
+        """
         loc, scale = self.scaler(
             target,
             observed_mask * ~prediction_mask.unsqueeze(-1),

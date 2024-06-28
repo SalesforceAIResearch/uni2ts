@@ -25,6 +25,11 @@ from uni2ts.common.torch_util import safe_div
 
 
 class PackedLoss(abc.ABC):
+    """
+    Abstract base class for loss functions supporting packed inputs.
+    Subclasses should implement the _loss_func method which computes the loss function per token.
+    """
+
     def __call__(
         self,
         pred: Any,
@@ -34,6 +39,15 @@ class PackedLoss(abc.ABC):
         sample_id: Optional[Int[torch.Tensor, "*batch seq_len"]] = None,
         variate_id: Optional[Int[torch.Tensor, "*batch seq_len"]] = None,
     ) -> Float[torch.Tensor, ""]:
+        """
+        :param pred: predictions
+        :param target: target labels
+        :param prediction_mask: 1 for predictions, 0 for non-predictions
+        :param observed_mask: 1 for observed values, 0 for non-observed values
+        :param sample_id: integer array representing the sample id
+        :param variate_id: integer array representing the variate id
+        :return: loss
+        """
         if observed_mask is None:
             observed_mask = torch.ones_like(target, dtype=torch.bool)
         if sample_id is None:
@@ -96,6 +110,8 @@ class PackedLoss(abc.ABC):
 
 
 class PackedPointLoss(PackedLoss):
+    """Abstract base class for loss functions on point forecasts."""
+
     @abc.abstractmethod
     def _loss_func(
         self,
@@ -109,6 +125,8 @@ class PackedPointLoss(PackedLoss):
 
 
 class PackedDistributionLoss(PackedLoss):
+    """Abstract base class for loss functions on probabilistic (distribution) forecasts."""
+
     @abc.abstractmethod
     def _loss_func(
         self,

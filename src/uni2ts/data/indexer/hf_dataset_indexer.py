@@ -28,7 +28,15 @@ from ._base import Indexer
 
 
 class HuggingFaceDatasetIndexer(Indexer):
+    """
+    Indexer for Hugging Face Datasets
+    """
+
     def __init__(self, dataset: Dataset, uniform: bool = False):
+        """
+        :param dataset: underlying Hugging Face Dataset
+        :param uniform: whether the underlying data has uniform length
+        """
         super().__init__(uniform=uniform)
         self.dataset = dataset
         self.features = dict(self.dataset.features)
@@ -109,6 +117,14 @@ class HuggingFaceDatasetIndexer(Indexer):
         return array
 
     def get_proportional_probabilities(self, field: str = "target") -> np.ndarray:
+        """
+        Obtain proportion of each time series based on number of time steps.
+        Leverages pyarrow.compute for fast implementation.
+
+        :param field: field name to measure time series length
+        :return: proportional probabilities
+        """
+
         if self.uniform:
             return self.get_uniform_probabilities()
 
