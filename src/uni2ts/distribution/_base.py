@@ -132,6 +132,11 @@ class AffineTransformed(TransformedDistribution):
 
 @abstract_class_property("distr_cls")
 class DistributionOutput:
+    """
+    Base class for distribution outputs.
+    Defines the type of output distribution and provides several helper methods for predictive distributions.
+    """
+
     distr_cls: type[Distribution] = NotImplemented
 
     def distribution(
