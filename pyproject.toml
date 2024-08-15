@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "salesforce-uni2ts"
+name = "uni2ts"
 dynamic = [
   "version",
 ]
@@ -35,7 +35,8 @@ authors = [
   {name = "Doyen Sahoo"},
 ]
 maintainers = [
-  {name = "Gerald Woo", email = "gwoo@salesforce.com"}
+  {name = "Gerald Woo", email = "gwoo@salesforce.com"},
+  {name = "Juncheng Liu", email = "juncheng.liu@salesforce.com"}
 ]
 description = "Unified Training of Universal Time Series Forecasting Transformers"
 readme = "README.md"
