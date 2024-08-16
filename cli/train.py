@@ -142,6 +142,7 @@ def main(cfg: DictConfig):
     trainer.fit(
         model,
         datamodule=DataModule(cfg, train_dataset, val_dataset),
+        ckpt_path=cfg.ckpt_path,
     )
 
 

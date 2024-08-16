@@ -10,6 +10,7 @@ run_name: ???
 seed: 0
 tf32: true
 compile: false  # set to mode: default, reduce-overhead, max-autotune
+ckpt_path: null
 trainer:
   _target_: lightning.Trainer
   accelerator: auto
