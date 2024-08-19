@@ -23,17 +23,39 @@ from uni2ts.transform import Transformation
 
 # TODO: Add __repr__
 class DatasetBuilder(abc.ABC):
+    """
+    Base class for DatasetBuilders.
+    """
+
     @abc.abstractmethod
-    def build_dataset(self, *args, **kwargs): ...
+    def build_dataset(self, *args, **kwargs):
+        """
+        Builds the dataset into the required file format.
+        """
+        ...
 
     @abc.abstractmethod
     def load_dataset(
         self, transform_map: dict[Any, Callable[..., Transformation]]
-    ) -> Dataset: ...
+    ) -> Dataset:
+        """
+        Load the dataset.
+
+        :param transform_map: a map which returns the required dataset transformations to be applied
+        :return: the dataset ready for training
+        """
+        ...
 
 
 class ConcatDatasetBuilder(DatasetBuilder):
+    """
+    Concatenates DatasetBuilders such that they can be loaded together.
+    """
+
     def __init__(self, *builders: DatasetBuilder):
+        """
+        :param builders: DatasetBuilders to be concatenated together.
+        """
         super().__init__()
         assert len(builders) > 0, "Must provide at least one builder to ConcatBuilder"
         assert all(
@@ -49,6 +71,12 @@ class ConcatDatasetBuilder(DatasetBuilder):
     def load_dataset(
         self, transform_map: dict[Any, Callable[..., Transformation]]
     ) -> ConcatDataset:
+        """
+        Loads all builders with ConcatDataset.
+
+        :param transform_map: a map which returns the required dataset transformations to be applied
+        :return: the dataset ready for training
+        """
         return ConcatDataset(
             [builder.load_dataset(transform_map) for builder in self.builders]
         )
