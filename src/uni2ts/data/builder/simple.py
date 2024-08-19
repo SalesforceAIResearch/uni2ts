@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 import argparse
+from collections import defaultdict
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
@@ -26,15 +27,24 @@ from torch.utils.data import Dataset
 
 from uni2ts.common.env import env
 from uni2ts.common.typing import GenFunc
+from uni2ts.data.builder._base import DatasetBuilder
 from uni2ts.data.dataset import EvalDataset, SampleTimeSeriesType, TimeSeriesDataset
 from uni2ts.data.indexer import HuggingFaceDatasetIndexer
 from uni2ts.transform import Transformation
 
-from ._base import DatasetBuilder
+# Manually set the freq of the datasets whose freq can be inferred automatically. Default freq is H.
+freq_dict = defaultdict(
+    lambda: "H",
+    {
+        "weather": "10T",
+        "weather_eval": "10T",
+    },
+)
 
 
 def _from_long_dataframe(
     df: pd.DataFrame,
+    dataset: str,
     offset: Optional[int] = None,
     date_offset: Optional[pd.Timestamp] = None,
 ) -> tuple[GenFunc, Features]:
@@ -50,7 +60,11 @@ def _from_long_dataframe(
             yield {
                 "target": item_df.to_numpy(),
                 "start": item_df.index[0],
-                "freq": pd.infer_freq(item_df.index),
+                "freq": (
+                    pd.infer_freq(df.index)
+                    if pd.infer_freq(df.index) is not None
+                    else freq_dict[dataset]
+                ),
                 "item_id": item_id,
             }
 
@@ -68,6 +82,7 @@ def _from_long_dataframe(
 
 def _from_wide_dataframe(
     df: pd.DataFrame,
+    dataset: str,
     offset: Optional[int] = None,
     date_offset: Optional[pd.Timestamp] = None,
 ) -> tuple[GenFunc, Features]:
@@ -83,7 +98,11 @@ def _from_wide_dataframe(
             yield {
                 "target": df.iloc[:, i].to_numpy(),
                 "start": df.index[0],
-                "freq": pd.infer_freq(df.index),
+                "freq": (
+                    pd.infer_freq(df.index)
+                    if pd.infer_freq(df.index) is not None
+                    else freq_dict[dataset]
+                ),
                 "item_id": f"item_{i}",
             }
 
@@ -101,6 +120,7 @@ def _from_wide_dataframe(
 
 def _from_wide_dataframe_multivariate(
     df: pd.DataFrame,
+    dataset: str,
     offset: Optional[int] = None,
     date_offset: Optional[pd.Timestamp] = None,
 ) -> tuple[GenFunc, Features]:
@@ -113,7 +133,11 @@ def _from_wide_dataframe_multivariate(
         yield {
             "target": df.to_numpy().T,
             "start": df.index[0],
-            "freq": pd.infer_freq(df.index),
+            "freq": (
+                pd.infer_freq(df.index)
+                if pd.infer_freq(df.index) is not None
+                else freq_dict[dataset]
+            ),
             "item_id": "item_0",
         }
 
@@ -166,7 +190,7 @@ class SimpleDatasetBuilder(DatasetBuilder):
             )
 
         example_gen_func, features = _from_dataframe(
-            df, offset=offset, date_offset=date_offset
+            df, dataset=self.dataset, offset=offset, date_offset=date_offset
         )
         hf_dataset = datasets.Dataset.from_generator(
             example_gen_func, features=features
@@ -218,7 +242,7 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
                 " Valid options are 'long', 'wide', and 'wide_multivariate'."
             )
 
-        example_gen_func, features = _from_dataframe(df)
+        example_gen_func, features = _from_dataframe(df, dataset=self.dataset)
         hf_dataset = datasets.Dataset.from_generator(
             example_gen_func, features=features
         )
