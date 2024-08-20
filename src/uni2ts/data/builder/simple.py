@@ -14,7 +14,6 @@
 #  limitations under the License.
 
 import argparse
-from collections import defaultdict
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
@@ -27,28 +26,32 @@ from torch.utils.data import Dataset
 
 from uni2ts.common.env import env
 from uni2ts.common.typing import GenFunc
-from uni2ts.data.builder._base import DatasetBuilder
 from uni2ts.data.dataset import EvalDataset, SampleTimeSeriesType, TimeSeriesDataset
 from uni2ts.data.indexer import HuggingFaceDatasetIndexer
 from uni2ts.transform import Transformation
 
-# Manually set the freq of the datasets whose freq can be inferred automatically. Default freq is H.
-freq_dict = defaultdict(
-    lambda: "H",
-    {
-        "weather": "10T",
-        "weather_eval": "10T",
-    },
-)
+from ._base import DatasetBuilder
 
 
 def _from_long_dataframe(
     df: pd.DataFrame,
-    dataset: str,
     offset: Optional[int] = None,
     date_offset: Optional[pd.Timestamp] = None,
+    freq: str = "H",
 ) -> tuple[GenFunc, Features]:
     items = df.item_id.unique()
+
+    # Infer the freq and generate the prompt
+    inferred_freq = pd.infer_freq(df.index)
+
+    if inferred_freq is not None:
+        print(
+            f"Inferred frequency: {inferred_freq}. Using this value for the 'freq' parameter."
+        )
+    else:
+        print(
+            f"Inferred frequency is None. Using predefined {freq} for the 'freq' parameter."
+        )
 
     def example_gen_func() -> Generator[dict[str, Any], None, None]:
         for item_id in items:
@@ -63,7 +66,7 @@ def _from_long_dataframe(
                 "freq": (
                     pd.infer_freq(df.index)
                     if pd.infer_freq(df.index) is not None
-                    else freq_dict[dataset]
+                    else freq
                 ),
                 "item_id": item_id,
             }
@@ -82,9 +85,9 @@ def _from_long_dataframe(
 
 def _from_wide_dataframe(
     df: pd.DataFrame,
-    dataset: str,
     offset: Optional[int] = None,
     date_offset: Optional[pd.Timestamp] = None,
+    freq: str = "H",
 ) -> tuple[GenFunc, Features]:
     if offset is not None:
         df = df.iloc[:offset]
@@ -92,6 +95,18 @@ def _from_wide_dataframe(
         df = df[df.index <= date_offset]
 
     print(df)
+
+    # Infer the freq and generate the prompt
+    inferred_freq = pd.infer_freq(df.index)
+
+    if inferred_freq is not None:
+        print(
+            f"Inferred frequency: {inferred_freq}. Using this value for the 'freq' parameter."
+        )
+    else:
+        print(
+            f"Inferred frequency is None. Using predefined {freq} for the 'freq' parameter."
+        )
 
     def example_gen_func() -> Generator[dict[str, Any], None, None]:
         for i in range(len(df.columns)):
@@ -101,7 +116,7 @@ def _from_wide_dataframe(
                 "freq": (
                     pd.infer_freq(df.index)
                     if pd.infer_freq(df.index) is not None
-                    else freq_dict[dataset]
+                    else freq
                 ),
                 "item_id": f"item_{i}",
             }
@@ -120,23 +135,33 @@ def _from_wide_dataframe(
 
 def _from_wide_dataframe_multivariate(
     df: pd.DataFrame,
-    dataset: str,
     offset: Optional[int] = None,
     date_offset: Optional[pd.Timestamp] = None,
+    freq: str = "H",
 ) -> tuple[GenFunc, Features]:
     if offset is not None:
         df = df.iloc[:offset]
     elif date_offset is not None:
         df = df[df.index <= date_offset]
 
+    # Infer the freq and generate the prompt
+    inferred_freq = pd.infer_freq(df.index)
+
+    if inferred_freq is not None:
+        print(
+            f"Inferred frequency: {inferred_freq}. Using this value for the 'freq' parameter."
+        )
+    else:
+        print(
+            f"Inferred frequency is None. Using predefined {freq} for the 'freq' parameter."
+        )
+
     def example_gen_func() -> Generator[dict[str, Any], None, None]:
         yield {
             "target": df.to_numpy().T,
             "start": df.index[0],
             "freq": (
-                pd.infer_freq(df.index)
-                if pd.infer_freq(df.index) is not None
-                else freq_dict[dataset]
+                pd.infer_freq(df.index) if pd.infer_freq(df.index) is not None else freq
             ),
             "item_id": "item_0",
         }
@@ -169,6 +194,7 @@ class SimpleDatasetBuilder(DatasetBuilder):
         dataset_type: str,
         offset: Optional[int] = None,
         date_offset: Optional[pd.Timestamp] = None,
+        freq: str = "H",
     ):
         assert offset is None or date_offset is None, (
             "One or neither offset and date_offset must be specified, but not both. "
@@ -190,7 +216,7 @@ class SimpleDatasetBuilder(DatasetBuilder):
             )
 
         example_gen_func, features = _from_dataframe(
-            df, dataset=self.dataset, offset=offset, date_offset=date_offset
+            df, freq=freq, offset=offset, date_offset=date_offset
         )
         hf_dataset = datasets.Dataset.from_generator(
             example_gen_func, features=features
@@ -227,7 +253,7 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
     def __post_init__(self):
         self.storage_path = Path(self.storage_path)
 
-    def build_dataset(self, file: Path, dataset_type: str):
+    def build_dataset(self, file: Path, dataset_type: str, freq: str = "H"):
         df = pd.read_csv(file, index_col=0, parse_dates=True)
 
         if dataset_type == "long":
@@ -242,7 +268,7 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
                 " Valid options are 'long', 'wide', and 'wide_multivariate'."
             )
 
-        example_gen_func, features = _from_dataframe(df, dataset=self.dataset)
+        example_gen_func, features = _from_dataframe(df, freq=freq)
         hf_dataset = datasets.Dataset.from_generator(
             example_gen_func, features=features
         )
@@ -313,6 +339,13 @@ if __name__ == "__main__":
         type=str,
         default=None,
     )
+    # Define the `freq` argument with a default value. Use this value as 'freq' if 'freq' is None.
+    parser.add_argument(
+        "--freq",
+        default="H",  # Set the default value
+        help="The user specified frequency",
+    )
+
     args = parser.parse_args()
 
     SimpleDatasetBuilder(dataset=args.dataset_name).build_dataset(
@@ -320,6 +353,7 @@ if __name__ == "__main__":
         dataset_type=args.dataset_type,
         offset=args.offset,
         date_offset=pd.Timestamp(args.date_offset) if args.date_offset else None,
+        freq=args.freq,
     )
 
     if args.offset is not None or args.date_offset is not None:
@@ -331,4 +365,6 @@ if __name__ == "__main__":
             prediction_length=None,
             context_length=None,
             patch_size=None,
-        ).build_dataset(file=Path(args.file_path), dataset_type=args.dataset_type)
+        ).build_dataset(
+            file=Path(args.file_path), dataset_type=args.dataset_type, freq=args.freq
+        )
