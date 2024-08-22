@@ -39,6 +39,13 @@ trainer:
       mode: max
       save_top_k: -1
       every_n_epochs: ${floordiv:${trainer.max_epochs},10}
+    - _target_: uni2ts.callbacks.HuggingFaceCheckpoint.HuggingFaceCheckpoint
+      dirpath: ${hydra:runtime.output_dir}/HF_checkpoints
+      filename: last
+      monitor: epoch
+      mode: max
+      save_top_k: 1
+      every_n_epochs: 1
   # epoch-based training provides averaged metrics
   # cannot use max_steps with epoch-based training - resume from checkpoint on wrong epoch
   max_epochs: 1_000
