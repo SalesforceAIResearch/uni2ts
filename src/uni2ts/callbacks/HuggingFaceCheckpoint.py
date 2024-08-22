@@ -36,7 +36,6 @@ from lightning.pytorch.utilities.rank_zero import (
 log = logging.getLogger(__name__)
 warning_cache = WarningCache()
 
-
 _PATH = Union[str, Path]
 
 
@@ -73,8 +72,13 @@ class HuggingFaceCheckpoint(ModelCheckpoint):
         pl_module = trainer.model
         pretrain_module = pl_module.module
 
-        if hasattr(pretrain_module, "module"):
+        try:
             moirai_module = pretrain_module.module
+        except AttributeError:
+            moirai_module = pretrain_module
+            warnings.warn(
+                "Warning: no module attribute found in the model. Saving the model directly."
+            )
 
         # filepath in pytorch lightning usually ends with .ckpt
         # To get the directory to save the model, remove the .ckpt
@@ -82,7 +86,11 @@ class HuggingFaceCheckpoint(ModelCheckpoint):
             save_dir = filepath.split(".ckpt")[0]
         else:
             save_dir = filepath
-        moirai_module.save_pretrained(save_dir)
+
+        try:
+            moirai_module.save_pretrained(save_dir)
+        except Exception as e:
+            warnings.warn(f"An error occurred during model saving: {e}")
 
         self._last_global_step_saved = trainer.global_step
         self._last_checkpoint_saved = save_dir
