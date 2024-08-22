@@ -7,6 +7,8 @@ Uni2TS also provides tools for fine-tuning, inference, and evaluation for time s
 
 ## 🎉 What's New
 
+* Jun 2024: Released Moirai-1.1-R model weights in [small](https://huggingface.co/Salesforce/moirai-1.1-R-small), [base](https://huggingface.co/Salesforce/moirai-1.1-R-base), and [large](https://huggingface.co/Salesforce/moirai-1.1-R-large).
+
 * May 2024: The Uni2TS paper has been accepted to ICML 2024 as an Oral presentation!
 
 * Mar 2024: Release of Uni2TS library, along with [Moirai-1.0-R](https://huggingface.co/collections/Salesforce/moirai-10-r-models-65c8d3a94c51428c300e0742) and [LOTSA data](https://huggingface.co/datasets/Salesforce/lotsa_data/)!
