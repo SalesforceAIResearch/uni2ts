@@ -39,7 +39,7 @@ def evaluate(
     test_setting="monash",
     pred_length=96,
 ):
-    print("-" * 5, f"Evaluating {dataset}", "-" * 5)
+    print("-" * 5, f"Evaluating {dataset} on {test_setting} setting", "-" * 5)
     if test_setting == "monash" or test_setting == "pf":
         get_dataset = get_gluonts_test_dataset  # for monash and pf, the prediction length can be inferred.
     elif test_setting == "lsf":
@@ -153,4 +153,12 @@ if __name__ == "__main__":
         save_dir = os.path.join(output_dir, f"{args.dataset}_{args.pred_length}.csv")
     else:
         save_dir = os.path.join(output_dir, f"{args.dataset}.csv")
-    evaluate(pipeline, args.dataset, save_dir, args.num_samples, args.batch_size)
+    evaluate(
+        pipeline,
+        args.dataset,
+        save_dir,
+        args.num_samples,
+        args.batch_size,
+        test_setting=args.test_setting,
+        pred_length=args.pred_length,
+    )
