@@ -1,5 +1,6 @@
 import argparse
 import os
+from functools import partial
 
 import numpy as np
 import torch
@@ -24,14 +25,30 @@ from gluonts.itertools import batcher
 from gluonts.model.forecast import SampleForecast
 from tqdm.auto import tqdm
 
-from uni2ts.eval_util.data import get_gluonts_test_dataset
+from uni2ts.eval_util.data import get_gluonts_test_dataset, get_lsf_test_dataset
 from uni2ts.eval_util.evaluation import evaluate_forecasts
 from uni2ts.eval_util.metrics import MedianMSE
 
 
-def evaluate(pipeline, dataset, save_path, num_samples=20, batch_size=512):
-    print("-" * 5, f"Evaluating {dataset}", "-" * 5)
-    test_data, metadata = get_gluonts_test_dataset(dataset)
+def evaluate(
+    pipeline,
+    dataset,
+    save_path,
+    num_samples=20,
+    batch_size=512,
+    test_setting="monash",
+    pred_length=96,
+):
+    print("-" * 5, f"Evaluating {dataset} on {test_setting} setting", "-" * 5)
+    if test_setting == "monash" or test_setting == "pf":
+        get_dataset = get_gluonts_test_dataset  # for monash and pf, the prediction length can be inferred.
+    elif test_setting == "lsf":
+        get_dataset = partial(get_lsf_test_dataset, prediction_length=pred_length)
+    else:
+        raise NotImplementedError(
+            f"Cannot find the test setting {test_setting}. Please select from monash, pf, lsf."
+        )
+    test_data, metadata = get_dataset(dataset)
     prediction_length = metadata.prediction_length
 
     while True:
@@ -110,6 +127,16 @@ if __name__ == "__main__":
         "--batch_size", type=int, default=512, help="Batch size for generating samples"
     )
     parser.add_argument("--run_name", type=str, default="test", help="Name of the run")
+    parser.add_argument(
+        "--test_setting",
+        type=str,
+        default="monash",
+        choices=["monash", "lsf", "pf"],
+        help="Name of the test setting",
+    )
+    parser.add_argument(
+        "--pred_length", type=int, default=96, help="Prediction length for LSF dataset"
+    )
 
     args = parser.parse_args()
     # Load Chronos
@@ -122,4 +149,16 @@ if __name__ == "__main__":
     output_dir = os.path.join(args.save_dir, args.run_name)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    evaluate(pipeline, args.dataset, os.path.join(output_dir, f"{args.dataset}.csv"))
+    if args.test_setting == "lsf":
+        save_dir = os.path.join(output_dir, f"{args.dataset}_{args.pred_length}.csv")
+    else:
+        save_dir = os.path.join(output_dir, f"{args.dataset}.csv")
+    evaluate(
+        pipeline,
+        args.dataset,
+        save_dir,
+        args.num_samples,
+        args.batch_size,
+        test_setting=args.test_setting,
+        pred_length=args.pred_length,
+    )
