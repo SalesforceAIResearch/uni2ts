@@ -17,3 +17,20 @@ On datasets for Probabilistic forecasting:
 ```
 sh chronos_scripts/pf_chronos_base.sh
 ```
+
+
+## TimesFM
+`run_timesfm.py` is the code to run TimesFM on a given dataset.
+
+`timesfm_scripts` contains the scripts to run TimesFM on different datasets.
+
+### Examples
+On Monash dataset:
+```
+sh monash_timesfm.sh 
+```
+
+On datasets for LSF: 
+```
+sh lsf_timesfm.sh
+```
