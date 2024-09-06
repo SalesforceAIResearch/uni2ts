@@ -1,0 +1,6 @@
+ETTh1 24 2880
+ETTh2 24 1728
+ETTm1 96 2304
+ETTm2 96 4032
+electricity 24 2880
+weather 144 4032
