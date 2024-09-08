@@ -1,0 +1,6 @@
+electricity 24 2000
+solar-energy 24 2000
+walmart 52 1000
+jena_weather 144 4000
+istanbul_traffic 24 2000
+turkey_power 24 2000

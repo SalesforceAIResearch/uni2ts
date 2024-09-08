@@ -61,3 +61,8 @@ On datasets for LSF:
 ```bash
 bash visionts_scripts/lsf_visionts.sh
 ```
+
+On datasets for PF: 
+```bash
+bash visionts_scripts/pf_visionts.sh
+```

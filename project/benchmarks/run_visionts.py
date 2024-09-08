@@ -10,15 +10,11 @@ from visionts import VisionTS
 import torch
 from gluonts.ev.metrics import (
     MAE,
-    MAPE,
     MASE,
     MSE,
-    MSIS,
     ND,
     NRMSE,
-    RMSE,
     SMAPE,
-    MeanWeightedSumQuantileLoss,
 )
 from gluonts.itertools import batcher
 
@@ -29,7 +25,23 @@ from tqdm.auto import tqdm
 
 from uni2ts.eval_util.data import get_gluonts_test_dataset, get_lsf_test_dataset
 from uni2ts.eval_util.evaluation import evaluate_forecasts
-from uni2ts.eval_util.metrics import MedianMSE
+
+
+def imputation_nan(array):
+    """
+    Impute missing value using Naive forecasting.
+    """
+    not_nan_mask = ~np.isnan(array)
+    if not_nan_mask.all():
+        return array
+    if not not_nan_mask.any():
+        return np.zeros_like(array)
+
+    array_imputed = np.copy(array)
+    for i in range(len(array)):
+        if not not_nan_mask[i]:
+            array_imputed[i] = array_imputed[i - 1]
+    return array_imputed
 
 
 def evaluate(
@@ -79,7 +91,9 @@ def evaluate(
             forecast_samples = []
             for batch in tqdm(list(batcher(test_data.input, batch_size=batch_size)), desc="Forecasting"):
                 context = [
-                    torch.tensor(entry["target"])[-context_len:].view((1, -1, 1)).to(device)
+                    torch.tensor(
+                        imputation_nan(entry["target"][-context_len:])
+                    ).view((1, -1, 1)).to(device)
                     for entry in batch
                 ]
                 try:
@@ -119,15 +133,10 @@ def evaluate(
         metrics=[
             MSE(),
             MAE(),
-            MAPE(),
             SMAPE(),
-            MSIS(),
-            RMSE(),
-            NRMSE(),
-            ND(),
             MASE(),
-            MedianMSE(),
-            MeanWeightedSumQuantileLoss(np.arange(0.1, 1.0, 0.1)),
+            ND(),
+            NRMSE(),
         ],
     )
     metrics_df.index = [dataset]
@@ -216,5 +225,7 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
             test_setting=args.test_setting,
             prediction_length=args.pred_length,
-            periodicity=args.periodicity
+            periodicity=args.periodicity,
+            norm_const=args.norm_const,
+            align_const=args.align_const,
         )
