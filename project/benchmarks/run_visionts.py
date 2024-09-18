@@ -59,7 +59,7 @@ def norm_freq_str(freq_str: str) -> str:
 
 def get_seasonality_list(freq: str) -> int:
     offset = pd.tseries.frequencies.to_offset(freq)
-    base_seasonality_list = POSSIBLE_SEASONALITIES.get(norm_freq_str(offset.name), 1)
+    base_seasonality_list = POSSIBLE_SEASONALITIES.get(norm_freq_str(offset.name), [])
     seasonality_list = []
     for base_seasonality in base_seasonality_list:
         seasonality, remainder = divmod(base_seasonality, offset.n)
