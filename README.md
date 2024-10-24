@@ -7,6 +7,8 @@ Uni2TS also provides tools for fine-tuning, inference, and evaluation for time s
 
 ## 🎉 What's New
 
+* Oct 2024: A new model Moirai-MoE! The preprint is now available on [arXiv](https://arxiv.org/abs/2410.10469). Model weights to be released soon.
+
 * Jun 2024: Released Moirai-1.1-R model weights in [small](https://huggingface.co/Salesforce/moirai-1.1-R-small), [base](https://huggingface.co/Salesforce/moirai-1.1-R-base), and [large](https://huggingface.co/Salesforce/moirai-1.1-R-large).
 
 * May 2024: The Uni2TS paper has been accepted to ICML 2024 as an Oral presentation!
