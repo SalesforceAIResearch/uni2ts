@@ -8,6 +8,8 @@ Related reading: [Moirai Paper](https://arxiv.org/abs/2402.02592), [Moirai Sales
 
 * Oct 2024: A new model Moirai-MoE! The preprint is available on [arXiv](https://arxiv.org/abs/2410.10469), along with model weights of [small](https://huggingface.co/Salesforce/moirai-moe-1.0-R-small) and [base](https://huggingface.co/Salesforce/moirai-moe-1.0-R-base), and [simple example](https://github.com/SalesforceAIResearch/uni2ts/project/moirai-moe-1) to get started.
 
+* Sep 2024: Released [Evaluation Code](https://github.com/SalesforceAIResearch/uni2ts/tree/main/project/benchmarks) of [TimesFM](https://arxiv.org/abs/2310.10688), [Chronos](https://arxiv.org/abs/2403.07815) and [VisionTS](https://arxiv.org/abs/2408.17253) on Monash, LSF and PF benchmarks.
+
 * Jun 2024: Released Moirai-1.1-R model weights in [small](https://huggingface.co/Salesforce/moirai-1.1-R-small), [base](https://huggingface.co/Salesforce/moirai-1.1-R-base), and [large](https://huggingface.co/Salesforce/moirai-1.1-R-large).
 
 * May 2024: The [Moirai Paper](https://arxiv.org/abs/2402.02592) has been accepted to ICML 2024 as an Oral presentation!
