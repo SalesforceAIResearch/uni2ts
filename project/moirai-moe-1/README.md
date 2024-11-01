@@ -85,13 +85,13 @@ plot_next_multi(
 Extensive experiments on 39 datasets demonstrate the superiority of Moirai-MoE over existing foundation models in both in-distribution and zero-shot scenarios.
 
 <p align="center">
-<img src="./img/in-dist.png" width="800" alt="" align=center />
+<img src="./img/in-dist.png" width="750" alt="" align=center />
 </p>
 
 The above figure presents the in-distribution evaluation using a total of 29 datasets from the Monash benchmark. The evaluation results show that Moirai-MoE beats all competitors.
 
 <p align="center">
-<img src="./img/zero-shot.png" width="800" alt="" align=center />
+<img src="./img/zero-shot.png" width="750" alt="" align=center />
 </p>
 
 The above table shows a zero-shot forecasting evaluation on 10 datasets and Moirai-MoE-Base achieves the best zero-shot performance.
