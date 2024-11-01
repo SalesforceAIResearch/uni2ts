@@ -24,7 +24,7 @@ from torch import nn
 from torch.distributions import Distribution
 from torch.utils._pytree import tree_map
 
-from uni2ts.common.torch_util import mask_fill, packed_attention_mask
+from uni2ts.common.torch_util import packed_causal_attention_mask
 from uni2ts.distribution import DistributionOutput
 from uni2ts.module.norm import RMSNorm
 from uni2ts.module.packed_scaler import PackedNOPScaler, PackedStdScaler
@@ -34,7 +34,7 @@ from uni2ts.module.position import (
     RotaryProjection,
 )
 from uni2ts.module.transformer import TransformerEncoder
-from uni2ts.module.ts_embed import MultiInSizeLinear
+from uni2ts.module.ts_embed import FeatLinear, MultiInSizeLinear
 
 
 def encode_distr_output(
@@ -59,7 +59,7 @@ def decode_distr_output(config: dict[str, str | float | int]) -> DistributionOut
     return instantiate(config, _convert_="all")
 
 
-class MoiraiModule(
+class MoiraiMoEModule(
     nn.Module,
     PyTorchModelHubMixin,
     coders={DistributionOutput: (encode_distr_output, decode_distr_output)},
@@ -73,6 +73,7 @@ class MoiraiModule(
         self,
         distr_output: DistributionOutput,
         d_model: int,
+        d_ff: int,
         num_layers: int,
         patch_sizes: tuple[int, ...],  # tuple[int, ...] | list[int]
         max_seq_len: int,
@@ -97,9 +98,16 @@ class MoiraiModule(
         self.max_seq_len = max_seq_len
         self.scaling = scaling
 
-        self.mask_encoding = nn.Embedding(num_embeddings=1, embedding_dim=d_model)
         self.scaler = PackedStdScaler() if scaling else PackedNOPScaler()
         self.in_proj = MultiInSizeLinear(
+            in_features_ls=patch_sizes,
+            out_features=d_model,
+        )
+        self.res_proj = MultiInSizeLinear(
+            in_features_ls=patch_sizes,
+            out_features=d_model,
+        )
+        self.feat_proj = FeatLinear(
             in_features_ls=patch_sizes,
             out_features=d_model,
         )
@@ -112,7 +120,7 @@ class MoiraiModule(
             dropout_p=dropout_p,
             norm_layer=RMSNorm,
             activation=F.silu,
-            use_moe=False,
+            use_moe=True,
             use_glu=True,
             use_qk_norm=True,
             var_attn_bias_layer=partial(BinaryAttentionBias),
@@ -124,7 +132,7 @@ class MoiraiModule(
             ),
             shared_var_attn_bias=False,
             shared_time_qk_proj=True,
-            d_ff=None,
+            d_ff=d_ff,
         )
         self.distr_output = distr_output
         self.param_proj = self.distr_output.get_param_proj(d_model, patch_sizes)
@@ -166,11 +174,16 @@ class MoiraiModule(
             variate_id,
         )
         scaled_target = (target - loc) / scale
-        reprs = self.in_proj(scaled_target, patch_size)
-        masked_reprs = mask_fill(reprs, prediction_mask, self.mask_encoding.weight)
+
+        in_reprs = self.in_proj(scaled_target, patch_size)
+        in_reprs = F.silu(in_reprs)
+        in_reprs = self.feat_proj(in_reprs, patch_size)
+        res_reprs = self.res_proj(scaled_target, patch_size)
+        reprs = in_reprs + res_reprs
+
         reprs = self.encoder(
-            masked_reprs,
-            packed_attention_mask(sample_id),
+            reprs,
+            packed_causal_attention_mask(sample_id, time_id),
             time_id=time_id,
             var_id=variate_id,
         )

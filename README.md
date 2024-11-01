@@ -1,19 +1,20 @@
-# Unified Training of Universal Time Series Forecasting Transformers
-[Paper](https://arxiv.org/abs/2402.02592) | [Blog Post](https://blog.salesforceairesearch.com/moirai/)
+# Unified Training of Universal Time Series Transformers
 
-Uni2TS is a PyTorch based library for research and applications related to Time Series Transformers.
-This library aims to provide a unified solution to large-scale pre-training of Universal Time Series Transformers.
-Uni2TS also provides tools for fine-tuning, inference, and evaluation for time series forecasting.
+Uni2TS is a PyTorch based library for research and applications related to Time Series Forecasting. It provides a unified framework for large-scale pre-training, fine-tuning, inference, and evaluation of Universal Time Series Transformers.
+
+Related reading: [Moirai Paper](https://arxiv.org/abs/2402.02592), [Moirai Salesforce Blog](https://blog.salesforceairesearch.com/moirai/), [Moirai-MoE Paper](https://arxiv.org/abs/2410.10469), [Moirai-MoE AI Horizon Forecast Blog](https://aihorizonforecast.substack.com/p/moirai-moe-upgrading-moirai-with), [Moirai-MoE Jiqizhixin Blog](https://mp.weixin.qq.com/s/LQvlgxx9vU965Yzy6RuBfQ).
 
 ## 🎉 What's New
 
-* Oct 2024: A new model Moirai-MoE! The preprint is now available on [arXiv](https://arxiv.org/abs/2410.10469). Model weights to be released soon.
+* Oct 2024: A new model Moirai-MoE! The preprint is available on [arXiv](https://arxiv.org/abs/2410.10469), along with model weights of [small](https://huggingface.co/Salesforce/moirai-moe-1.0-R-small) and [base](https://huggingface.co/Salesforce/moirai-moe-1.0-R-base), and [simple example](https://github.com/SalesforceAIResearch/uni2ts/project/moirai-moe-1) to get started.
+
+* Sep 2024: Released [Evaluation Code](https://github.com/SalesforceAIResearch/uni2ts/tree/main/project/benchmarks) of [TimesFM](https://arxiv.org/abs/2310.10688), [Chronos](https://arxiv.org/abs/2403.07815) and [VisionTS](https://arxiv.org/abs/2408.17253) on Monash, LSF and PF benchmarks.
 
 * Jun 2024: Released Moirai-1.1-R model weights in [small](https://huggingface.co/Salesforce/moirai-1.1-R-small), [base](https://huggingface.co/Salesforce/moirai-1.1-R-base), and [large](https://huggingface.co/Salesforce/moirai-1.1-R-large).
 
-* May 2024: The Uni2TS paper has been accepted to ICML 2024 as an Oral presentation!
+* May 2024: The [Moirai Paper](https://arxiv.org/abs/2402.02592) has been accepted to ICML 2024 as an Oral presentation!
 
-* Mar 2024: Release of Uni2TS library, along with [Moirai-1.0-R](https://huggingface.co/collections/Salesforce/moirai-10-r-models-65c8d3a94c51428c300e0742) and [LOTSA data](https://huggingface.co/datasets/Salesforce/lotsa_data/)!
+* Mar 2024: Release of Uni2TS library, along with [Moirai Paper](https://arxiv.org/abs/2402.02592), [Moirai-1.0-R Models](https://huggingface.co/collections/Salesforce/moirai-10-r-models-65c8d3a94c51428c300e0742), and [LOTSA Data](https://huggingface.co/datasets/Salesforce/lotsa_data/).
 
 ## ✅ TODO
 
@@ -230,15 +231,22 @@ python -m cli.train \
   data=lotsa_v1_unweighted
 ```
 
-## 👀 Citing Uni2TS
+## 👀 Citation
 
-If you're using Uni2TS in your research or applications, please cite it using this BibTeX:
+If you're using this repository in your research or applications, please cite using the following BibTeX:
 
 ```markdown
-@article{woo2024unified,
+@article{liu2024moiraimoe,
+  title={Moirai-MoE: Empowering Time Series Foundation Models with Sparse Mixture of Experts},
+  author={Liu, Xu and Liu, Juncheng and Woo, Gerald and Aksu, Taha and Liang, Yuxuan and Zimmermann, Roger and Liu, Chenghao and Savarese, Silvio and Xiong, Caiming and Sahoo, Doyen},
+  journal={arXiv preprint arXiv:2410.10469},
+  year={2024}
+}
+
+@inproceedings{woo2024unified,
   title={Unified Training of Universal Time Series Forecasting Transformers},
   author={Woo, Gerald and Liu, Chenghao and Kumar, Akshat and Xiong, Caiming and Savarese, Silvio and Sahoo, Doyen},
-  journal={arXiv preprint arXiv:2402.02592},
+  booktitle={Forty-first International Conference on Machine Learning},
   year={2024}
 }
 ```

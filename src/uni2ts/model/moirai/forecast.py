@@ -27,6 +27,7 @@ from gluonts.torch import PyTorchPredictor
 from gluonts.transform import (
     AddObservedValuesIndicator,
     AsNumpyArray,
+    CausalMeanValueImputation,
     ExpandDimArray,
     TestSplitSampler,
     Transformation,
@@ -81,6 +82,7 @@ class MoiraiForecast(L.LightningModule):
         module: Optional[MoiraiModule] = None,
         patch_size: int | str = "auto",
         num_samples: int = 100,
+        mode: str = "direct",
     ):
         assert (module is not None) or (
             module_kwargs is not None
@@ -332,20 +334,139 @@ class MoiraiForecast(L.LightningModule):
             idx = val_loss.argmin(dim=0)
             return preds[idx, torch.arange(len(idx), device=idx.device)]
         else:
-            distr = self._get_distr(
-                self.hparams.patch_size,
-                past_target,
-                past_observed_target,
-                past_is_pad,
-                feat_dynamic_real,
-                observed_feat_dynamic_real,
-                past_feat_dynamic_real,
-                past_observed_feat_dynamic_real,
-            )
-            preds = distr.sample(torch.Size((num_samples or self.hparams.num_samples,)))
-            return self._format_preds(
-                self.hparams.patch_size, preds, past_target.shape[-1]
-            )
+            if self.hparams.mode == "direct":
+                distr = self._get_distr(
+                    self.hparams.patch_size,
+                    past_target,
+                    past_observed_target,
+                    past_is_pad,
+                    feat_dynamic_real,
+                    observed_feat_dynamic_real,
+                    past_feat_dynamic_real,
+                    past_observed_feat_dynamic_real,
+                )
+                preds = distr.sample(
+                    torch.Size((num_samples or self.hparams.num_samples,))
+                )
+                return self._format_preds(
+                    self.hparams.patch_size, preds, past_target.shape[-1]
+                )
+
+            elif self.hparams.mode == "autoregressive":
+                context_step = self.context_token_length(self.hparams.patch_size)
+                context_token = self.hparams.target_dim * context_step
+                predict_step = self.prediction_token_length(self.hparams.patch_size)
+                predict_token = self.hparams.target_dim * predict_step
+
+                (
+                    target,
+                    observed_mask,
+                    sample_id,
+                    time_id,
+                    variate_id,
+                    prediction_mask,
+                ) = self._convert(
+                    self.hparams.patch_size,
+                    past_target,
+                    past_observed_target,
+                    past_is_pad,
+                    feat_dynamic_real=feat_dynamic_real,
+                    observed_feat_dynamic_real=observed_feat_dynamic_real,
+                    past_feat_dynamic_real=past_feat_dynamic_real,
+                    past_observed_feat_dynamic_real=past_observed_feat_dynamic_real,
+                )
+                patch_size = (
+                    torch.ones_like(time_id, dtype=torch.long) * self.hparams.patch_size
+                )
+
+                pred_index = torch.arange(
+                    start=context_step - 1, end=context_token, step=context_step
+                )
+                assign_index = torch.arange(
+                    start=context_token,
+                    end=context_token + predict_token,
+                    step=predict_step,
+                )
+
+                if predict_step == 1:
+                    distr = self.module(
+                        target,
+                        observed_mask,
+                        sample_id,
+                        time_id,
+                        variate_id,
+                        prediction_mask,
+                        patch_size,
+                    )
+                    preds = distr.sample(
+                        torch.Size((num_samples or self.hparams.num_samples,))
+                    )
+                    preds[..., assign_index, :] = preds[..., pred_index, :]
+                    return self._format_preds(
+                        self.hparams.patch_size, preds, self.hparams.target_dim
+                    )
+                else:
+                    distr = self.module(
+                        target,
+                        observed_mask,
+                        sample_id,
+                        time_id,
+                        variate_id,
+                        prediction_mask,
+                        patch_size,
+                    )
+                    preds = distr.sample(torch.Size((self.hparams.num_samples,)))
+
+                    expand_target = target.unsqueeze(0).repeat(
+                        self.hparams.num_samples, 1, 1, 1
+                    )
+                    expand_prediction_mask = prediction_mask.unsqueeze(0).repeat(
+                        self.hparams.num_samples, 1, 1
+                    )
+                    expand_observed_mask = observed_mask.unsqueeze(0).expand(
+                        self.hparams.num_samples, -1, -1, -1
+                    )
+                    expand_sample_id = sample_id.unsqueeze(0).expand(
+                        self.hparams.num_samples, -1, -1
+                    )
+                    expand_time_id = time_id.unsqueeze(0).expand(
+                        self.hparams.num_samples, -1, -1
+                    )
+                    expand_variate_id = variate_id.unsqueeze(0).expand(
+                        self.hparams.num_samples, -1, -1
+                    )
+                    expand_patch_size = patch_size.unsqueeze(0).expand(
+                        self.hparams.num_samples, -1, -1
+                    )
+
+                    expand_target[..., assign_index, :] = preds[..., pred_index, :]
+                    expand_prediction_mask[..., assign_index] = False
+
+                    remain_step = predict_step - 1
+                    while remain_step > 0:
+                        distr = self.module(
+                            expand_target,
+                            expand_observed_mask,
+                            expand_sample_id,
+                            expand_time_id,
+                            expand_variate_id,
+                            expand_prediction_mask,
+                            expand_patch_size,
+                        )
+                        preds = distr.sample(torch.Size((1,)))
+                        _, _, bs, token, ps = preds.shape
+                        preds = preds.view(-1, bs, token, ps)
+
+                        pred_index = assign_index
+                        assign_index = assign_index + 1
+                        expand_target[..., assign_index, :] = preds[..., pred_index, :]
+                        expand_prediction_mask[..., assign_index] = False
+
+                        remain_step -= 1
+
+                    return self._format_preds(
+                        self.hparams.patch_size, expand_target, self.hparams.target_dim
+                    )
 
     def _val_loss(
         self,
@@ -486,7 +607,9 @@ class MoiraiForecast(L.LightningModule):
             "max",
             patch=patch_size,
         )
-        past_seq_id = torch.clamp(past_seq_id.cumsum(dim=-1) - 1, min=0)
+        past_seq_id = torch.clamp(
+            past_seq_id.cummax(dim=-1).values.cumsum(dim=-1) - 1, min=0
+        )
         batch_shape = " ".join(map(str, past_observed_target.shape[:-2]))
         future_seq_id = (
             repeat(
@@ -943,12 +1066,20 @@ class MoiraiForecast(L.LightningModule):
             dtype=np.float32,
         )
         if self.hparams.target_dim == 1:
+            transform += AddObservedValuesIndicator(
+                target_field="target",
+                output_field="observed_target",
+                imputation_method=CausalMeanValueImputation(),
+                dtype=bool,
+            )
             transform += ExpandDimArray(field="target", axis=0)
-        transform += AddObservedValuesIndicator(
-            target_field="target",
-            output_field="observed_target",
-            dtype=bool,
-        )
+            transform += ExpandDimArray(field="observed_target", axis=0)
+        else:
+            transform += AddObservedValuesIndicator(
+                target_field="target",
+                output_field="observed_target",
+                dtype=bool,
+            )
 
         if self.hparams.feat_dynamic_real_dim > 0:
             transform += AsNumpyArray(
