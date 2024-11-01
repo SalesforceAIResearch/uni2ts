@@ -49,7 +49,8 @@ class FeedForward(nn.Module):
         self.activation = activation
 
     def forward(
-        self, x: Float[torch.Tensor, "... in_dim"],
+        self,
+        x: Float[torch.Tensor, "... in_dim"],
         centroid: Optional[Float[torch.Tensor, "expert in_dim"]] = None,
     ) -> Float[torch.Tensor, "... out_dim"]:
         x = self._in_proj(x)
@@ -122,7 +123,8 @@ class MoEFeedForward(nn.Module):
         )
 
     def forward(
-        self, x: Float[torch.Tensor, "... in_dim"],
+        self,
+        x: Float[torch.Tensor, "... in_dim"],
         centroid: Optional[Float[torch.Tensor, "expert in_dim"]] = None,
     ) -> Float[torch.Tensor, "... dim"]:
         x_squashed = x.view(-1, x.shape[-1])
@@ -136,11 +138,10 @@ class MoEFeedForward(nn.Module):
         cdist = torch.cdist(x_temp, centroid)
         gate_logits = cdist.view(-1, cdist.shape[-1])
 
-        weights, selected_experts = torch.topk(
-            gate_logits, self.num_experts_per_token
-        )
+        weights, selected_experts = torch.topk(gate_logits, self.num_experts_per_token)
         weights = nn.functional.softmax(
-            weights, dim=1,
+            weights,
+            dim=1,
             dtype=torch.float,
         ).type_as(x)
 

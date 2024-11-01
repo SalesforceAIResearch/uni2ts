@@ -19,4 +19,10 @@ from .module import MoiraiModule
 from .module_moe import MoiraiMoEModule
 from .pretrain import MoiraiPretrain
 
-__all__ = ["MoiraiFinetune", "MoiraiForecast", "MoiraiModule", "MoiraiMoEModule", "MoiraiPretrain"]
+__all__ = [
+    "MoiraiFinetune",
+    "MoiraiForecast",
+    "MoiraiModule",
+    "MoiraiMoEModule",
+    "MoiraiPretrain",
+]

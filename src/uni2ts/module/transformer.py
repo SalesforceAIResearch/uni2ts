@@ -195,8 +195,8 @@ class TransformerEncoder(nn.Module):
         )
         self.norm = norm_layer(d_model)
 
-        self.register_buffer("centroid", 
-            torch.empty(num_layers, 32, d_model, dtype=torch.float64)
+        self.register_buffer(
+            "centroid", torch.empty(num_layers, 32, d_model, dtype=torch.float64)
         )
 
     @staticmethod
@@ -222,5 +222,11 @@ class TransformerEncoder(nn.Module):
         time_id: Optional[Int[torch.Tensor, "*batch time_len"]] = None,
     ) -> Float[torch.Tensor, "*batch time_len dim"]:
         for idx, layer in enumerate(self.layers):
-            x = layer(x, attn_mask, var_id=var_id, time_id=time_id, centroid=self.centroid[idx])
+            x = layer(
+                x,
+                attn_mask,
+                var_id=var_id,
+                time_id=time_id,
+                centroid=self.centroid[idx],
+            )
         return self.norm(x)

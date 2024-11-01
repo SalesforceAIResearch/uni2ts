@@ -27,10 +27,10 @@ from gluonts.torch import PyTorchPredictor
 from gluonts.transform import (
     AddObservedValuesIndicator,
     AsNumpyArray,
+    CausalMeanValueImputation,
     ExpandDimArray,
     TestSplitSampler,
     Transformation,
-    CausalMeanValueImputation,
 )
 from gluonts.transform.split import TFTInstanceSplitter
 from jaxtyping import Bool, Float, Int
@@ -345,7 +345,9 @@ class MoiraiForecast(L.LightningModule):
                     past_feat_dynamic_real,
                     past_observed_feat_dynamic_real,
                 )
-                preds = distr.sample(torch.Size((num_samples or self.hparams.num_samples,)))
+                preds = distr.sample(
+                    torch.Size((num_samples or self.hparams.num_samples,))
+                )
                 return self._format_preds(
                     self.hparams.patch_size, preds, past_target.shape[-1]
                 )
@@ -373,10 +375,18 @@ class MoiraiForecast(L.LightningModule):
                     past_feat_dynamic_real=past_feat_dynamic_real,
                     past_observed_feat_dynamic_real=past_observed_feat_dynamic_real,
                 )
-                patch_size = torch.ones_like(time_id, dtype=torch.long) * self.hparams.patch_size
+                patch_size = (
+                    torch.ones_like(time_id, dtype=torch.long) * self.hparams.patch_size
+                )
 
-                pred_index = torch.arange(start=context_step-1, end=context_token, step=context_step)
-                assign_index = torch.arange(start=context_token, end=context_token+predict_token, step=predict_step)
+                pred_index = torch.arange(
+                    start=context_step - 1, end=context_token, step=context_step
+                )
+                assign_index = torch.arange(
+                    start=context_token,
+                    end=context_token + predict_token,
+                    step=predict_step,
+                )
 
                 if predict_step == 1:
                     distr = self.module(
@@ -388,7 +398,9 @@ class MoiraiForecast(L.LightningModule):
                         prediction_mask,
                         patch_size,
                     )
-                    preds = distr.sample(torch.Size((num_samples or self.hparams.num_samples,)))
+                    preds = distr.sample(
+                        torch.Size((num_samples or self.hparams.num_samples,))
+                    )
                     preds[..., assign_index, :] = preds[..., pred_index, :]
                     return self._format_preds(
                         self.hparams.patch_size, preds, self.hparams.target_dim
@@ -405,13 +417,27 @@ class MoiraiForecast(L.LightningModule):
                     )
                     preds = distr.sample(torch.Size((self.hparams.num_samples,)))
 
-                    expand_target = target.unsqueeze(0).repeat(self.hparams.num_samples, 1, 1, 1)
-                    expand_prediction_mask = prediction_mask.unsqueeze(0).repeat(self.hparams.num_samples, 1, 1)
-                    expand_observed_mask = observed_mask.unsqueeze(0).expand(self.hparams.num_samples, -1, -1, -1)
-                    expand_sample_id = sample_id.unsqueeze(0).expand(self.hparams.num_samples, -1, -1)
-                    expand_time_id = time_id.unsqueeze(0).expand(self.hparams.num_samples, -1, -1)
-                    expand_variate_id = variate_id.unsqueeze(0).expand(self.hparams.num_samples, -1, -1)
-                    expand_patch_size = patch_size.unsqueeze(0).expand(self.hparams.num_samples, -1, -1)
+                    expand_target = target.unsqueeze(0).repeat(
+                        self.hparams.num_samples, 1, 1, 1
+                    )
+                    expand_prediction_mask = prediction_mask.unsqueeze(0).repeat(
+                        self.hparams.num_samples, 1, 1
+                    )
+                    expand_observed_mask = observed_mask.unsqueeze(0).expand(
+                        self.hparams.num_samples, -1, -1, -1
+                    )
+                    expand_sample_id = sample_id.unsqueeze(0).expand(
+                        self.hparams.num_samples, -1, -1
+                    )
+                    expand_time_id = time_id.unsqueeze(0).expand(
+                        self.hparams.num_samples, -1, -1
+                    )
+                    expand_variate_id = variate_id.unsqueeze(0).expand(
+                        self.hparams.num_samples, -1, -1
+                    )
+                    expand_patch_size = patch_size.unsqueeze(0).expand(
+                        self.hparams.num_samples, -1, -1
+                    )
 
                     expand_target[..., assign_index, :] = preds[..., pred_index, :]
                     expand_prediction_mask[..., assign_index] = False
@@ -581,7 +607,9 @@ class MoiraiForecast(L.LightningModule):
             "max",
             patch=patch_size,
         )
-        past_seq_id = torch.clamp(past_seq_id.cummax(dim=-1).values.cumsum(dim=-1) - 1, min=0)
+        past_seq_id = torch.clamp(
+            past_seq_id.cummax(dim=-1).values.cumsum(dim=-1) - 1, min=0
+        )
         batch_shape = " ".join(map(str, past_observed_target.shape[:-2]))
         future_seq_id = (
             repeat(

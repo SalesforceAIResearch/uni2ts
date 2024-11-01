@@ -34,7 +34,7 @@ from uni2ts.module.position import (
     RotaryProjection,
 )
 from uni2ts.module.transformer import TransformerEncoder
-from uni2ts.module.ts_embed import MultiInSizeLinear, FeatLinear
+from uni2ts.module.ts_embed import FeatLinear, MultiInSizeLinear
 
 
 def encode_distr_output(

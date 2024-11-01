@@ -44,7 +44,7 @@ def packed_attention_mask(
 
 def packed_causal_attention_mask(
     sample_id: Int[torch.Tensor, "*batch seq_len"],
-    time_id: Int[torch.Tensor, "*batch seq_len"]
+    time_id: Int[torch.Tensor, "*batch seq_len"],
 ) -> Bool[torch.Tensor, "*batch seq_len seq_len"]:
     attention_mask = packed_attention_mask(sample_id)
     expanded_id1 = time_id.unsqueeze(-2)

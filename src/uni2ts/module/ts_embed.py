@@ -123,15 +123,12 @@ class FeatLinear(nn.Module):
         self.out_features = out_features
 
         self.weight = nn.Parameter(
-            torch.empty(
-                (len(in_features_ls), out_features, out_features), dtype=dtype
-            )
+            torch.empty((len(in_features_ls), out_features, out_features), dtype=dtype)
         )
 
         if bias:
             self.bias = nn.Parameter(
-                torch.empty((len(in_features_ls), out_features), dtype=dtype
-                )
+                torch.empty((len(in_features_ls), out_features), dtype=dtype)
             )
         else:
             self.register_parameter("bias", None)
