@@ -5,7 +5,7 @@ Our paper [Moirai-MoE: Empowering Time Series Foundation Models with Sparse Mixt
 The figure below presents the major difference between Moirai-MoE and Moirai. Compared to Moirai using multi-heuristic-defined input/output projection layers to model time series with different frequencies, Moirai-MoE utilizes a single input/output projection layer while delegating the task of capturing diverse time series patterns to the sparse mixture of experts Transformers. With these designs, the specialization of Moirai-MoE is achieved in a data-driven manner and operates at the token level.
 
 <p align="center">
-<img src="./img/framework.png" height="300" alt="" align=center />
+<img src="./img/framework.png" width="700" alt="" align=center />
 </p>
 
 
