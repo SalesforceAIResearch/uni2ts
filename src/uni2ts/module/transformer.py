@@ -23,7 +23,7 @@ from jaxtyping import Bool, Float, Int
 from torch import nn
 
 from .attention import GroupedQueryAttention
-from .ffn import FeedForward, GatedLinearUnitFeedForward
+from .ffn import FeedForward, GatedLinearUnitFeedForward, MoEFeedForward
 from .position import AttentionBias, QueryKeyProjection
 
 
@@ -53,17 +53,18 @@ class TransformerEncoderLayer(nn.Module):
         attn_mask: Optional[Bool[torch.Tensor, "*batch time_len time_len"]] = None,
         var_id: Optional[Int[torch.Tensor, "*batch time_len"]] = None,
         time_id: Optional[Int[torch.Tensor, "*batch time_len"]] = None,
+        centroid: Optional[Float[torch.Tensor, "expert dim"]] = None,
     ) -> Float[torch.Tensor, "*batch time_len dim"]:
         if self.pre_norm:
             x = x + self._sa_block(
                 self.norm1(x), attn_mask, var_id=var_id, time_id=time_id
             )
-            x = x + self.ffn(self.norm2(x))
+            x = x + self.ffn(self.norm2(x), centroid=centroid)
         else:
             x = self.norm1(
                 x + self._sa_block(x, attn_mask, var_id=var_id, time_id=time_id)
             )
-            x = self.norm2(x + self.ffn(x))
+            x = self.norm2(x + self.ffn(x, centroid=centroid))
 
         return x
 
@@ -99,6 +100,7 @@ class TransformerEncoder(nn.Module):
         dropout_p: float = 0.0,
         norm_layer: Optional[Callable[[int], nn.Module]] = nn.LayerNorm,
         activation: Callable[[torch.Tensor], torch.Tensor] = F.silu,
+        use_moe: bool = False,
         use_glu: bool = True,
         use_qk_norm: bool = True,
         var_attn_bias_layer: Optional[Callable[[int, int, int], AttentionBias]] = None,
@@ -154,15 +156,28 @@ class TransformerEncoder(nn.Module):
             var_qk_proj=var_qk_proj,
             time_qk_proj=time_qk_proj,
         )
-        get_ffn = partial(
-            GatedLinearUnitFeedForward if use_glu else FeedForward,
-            in_dim=d_model,
-            hidden_dim=d_ff,
-            out_dim=None,
-            activation=activation,
-            bias=False,
-            ffn_dropout_p=dropout_p,
-        )
+        if not use_moe:
+            get_ffn = partial(
+                GatedLinearUnitFeedForward if use_glu else FeedForward,
+                in_dim=d_model,
+                hidden_dim=d_ff,
+                out_dim=None,
+                activation=activation,
+                bias=False,
+                ffn_dropout_p=dropout_p,
+            )
+        else:
+            get_ffn = partial(
+                MoEFeedForward,
+                num_experts=32,
+                num_experts_per_token=2,
+                in_dim=d_model,
+                hidden_dim=d_ff,
+                out_dim=None,
+                activation=activation,
+                bias=False,
+                ffn_dropout_p=dropout_p,
+            )
         get_encoder_layer_norm = partial(norm_layer, d_model)
 
         self.layers = nn.ModuleList(
@@ -179,6 +194,10 @@ class TransformerEncoder(nn.Module):
             ]
         )
         self.norm = norm_layer(d_model)
+
+        self.register_buffer("centroid", 
+            torch.empty(num_layers, 32, d_model, dtype=torch.float64)
+        )
 
     @staticmethod
     def get_layer(
@@ -202,6 +221,6 @@ class TransformerEncoder(nn.Module):
         var_id: Optional[Int[torch.Tensor, "*batch time_len"]] = None,
         time_id: Optional[Int[torch.Tensor, "*batch time_len"]] = None,
     ) -> Float[torch.Tensor, "*batch time_len dim"]:
-        for layer in self.layers:
-            x = layer(x, attn_mask, var_id=var_id, time_id=time_id)
+        for idx, layer in enumerate(self.layers):
+            x = layer(x, attn_mask, var_id=var_id, time_id=time_id, centroid=self.centroid[idx])
         return self.norm(x)

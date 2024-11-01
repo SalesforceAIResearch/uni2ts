@@ -16,6 +16,7 @@
 from .finetune import MoiraiFinetune
 from .forecast import MoiraiForecast
 from .module import MoiraiModule
+from .module_moe import MoiraiMoEModule
 from .pretrain import MoiraiPretrain
 
-__all__ = ["MoiraiFinetune", "MoiraiForecast", "MoiraiModule", "MoiraiPretrain"]
+__all__ = ["MoiraiFinetune", "MoiraiForecast", "MoiraiModule", "MoiraiMoEModule", "MoiraiPretrain"]
