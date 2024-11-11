@@ -6,7 +6,7 @@ Related reading: [Moirai Paper](https://arxiv.org/abs/2402.02592), [Moirai Sales
 
 ## 🎉 What's New
 
-* Nov 2024: The first general time series forecasting benchmark [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval) is released. Moirai-Large achieves the best performance in the [Leaderborad](https://huggingface.co/spaces/Salesforce/GIFT-Eval)!
+* Nov 2024: The first general time series forecasting benchmark [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval) is released. Moirai-Large achieves the best performance in the [Leaderboard](https://huggingface.co/spaces/Salesforce/GIFT-Eval)!
 
 * Oct 2024: A new model Moirai-MoE! The preprint is available on [arXiv](https://arxiv.org/abs/2410.10469), along with the model weights of [Moirai-MoE-Small](https://huggingface.co/Salesforce/moirai-moe-1.0-R-small) and [Moirai-MoE-Base](https://huggingface.co/Salesforce/moirai-moe-1.0-R-base). Getting started with [inference code](https://github.com/SalesforceAIResearch/uni2ts/tree/main/project/moirai-moe-1) and [notebook examples](https://github.com/SalesforceAIResearch/uni2ts/tree/main/example)!
 
