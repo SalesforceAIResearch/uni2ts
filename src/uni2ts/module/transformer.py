@@ -118,6 +118,7 @@ class TransformerEncoder(nn.Module):
         d_ff: Optional[int] = None,
     ):
         super().__init__()
+        self.use_moe = use_moe
         num_heads = num_heads or d_model // 64
         num_groups = num_groups or num_heads  # defaults to mha
 
@@ -178,6 +179,9 @@ class TransformerEncoder(nn.Module):
                 bias=False,
                 ffn_dropout_p=dropout_p,
             )
+            self.register_buffer(
+                "centroid", torch.empty(num_layers, 32, d_model, dtype=torch.float64)
+            )
         get_encoder_layer_norm = partial(norm_layer, d_model)
 
         self.layers = nn.ModuleList(
@@ -194,10 +198,6 @@ class TransformerEncoder(nn.Module):
             ]
         )
         self.norm = norm_layer(d_model)
-
-        self.register_buffer(
-            "centroid", torch.empty(num_layers, 32, d_model, dtype=torch.float64)
-        )
 
     @staticmethod
     def get_layer(
@@ -221,12 +221,16 @@ class TransformerEncoder(nn.Module):
         var_id: Optional[Int[torch.Tensor, "*batch time_len"]] = None,
         time_id: Optional[Int[torch.Tensor, "*batch time_len"]] = None,
     ) -> Float[torch.Tensor, "*batch time_len dim"]:
-        for idx, layer in enumerate(self.layers):
-            x = layer(
-                x,
-                attn_mask,
-                var_id=var_id,
-                time_id=time_id,
-                centroid=self.centroid[idx],
-            )
+        if self.use_moe:
+            for idx, layer in enumerate(self.layers):
+                x = layer(
+                    x,
+                    attn_mask,
+                    var_id=var_id,
+                    time_id=time_id,
+                    centroid=self.centroid[idx],
+                )
+        else:
+            for layer in self.layers:
+                x = layer(x, attn_mask, var_id=var_id, time_id=time_id)
         return self.norm(x)

@@ -21,7 +21,7 @@ The pre-trained weights of Moirai-MoE can be found in the following table.
 
 ## Usage
 
-Let's see a simple example on how to use pre-trained Moirai-MoE models to make forecasts. 
+Let's see a simple example below on how to use pre-trained Moirai-MoE models to make forecasts. See also the notebooks in the [example folder](https://github.com/SalesforceAIResearch/uni2ts/tree/main/example) to try out Moirai-MoE.
 
 ```python
 import matplotlib.pyplot as plt
@@ -29,7 +29,7 @@ from gluonts.dataset.repository import dataset_recipes
 
 from uni2ts.eval_util.data import get_gluonts_test_dataset
 from uni2ts.eval_util.plot import plot_next_multi
-from uni2ts.model.moirai import MoiraiForecast, MoiraiMoEModule
+from uni2ts.model.moirai_moe import MoiraiMoEForecast, MoiraiMoEModule
 
 SIZE = "small"  # model size: choose from {'small', 'base'}
 CTX = 1000  # context length: any positive integer
@@ -43,11 +43,10 @@ test_data, metadata = get_gluonts_test_dataset(
 # print(sorted(dataset_recipes.keys()))
 
 # Prepare model
-model = MoiraiForecast(
+model = MoiraiMoEForecast(
     module=MoiraiMoEModule.from_pretrained(
         f"Salesforce/moirai-moe-1.0-R-{SIZE}",
     ),
-    mode="autoregressive",
     prediction_length=metadata.prediction_length,
     context_length=CTX,
     patch_size=16,

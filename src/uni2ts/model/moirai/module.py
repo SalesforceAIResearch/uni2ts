@@ -112,7 +112,6 @@ class MoiraiModule(
             dropout_p=dropout_p,
             norm_layer=RMSNorm,
             activation=F.silu,
-            use_moe=False,
             use_glu=True,
             use_qk_norm=True,
             var_attn_bias_layer=partial(BinaryAttentionBias),
