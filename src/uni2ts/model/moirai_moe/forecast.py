@@ -298,9 +298,7 @@ class MoiraiMoEForecast(L.LightningModule):
                 prediction_mask,
                 patch_size,
             )
-            preds = distr.sample(
-                torch.Size((num_samples or self.hparams.num_samples,))
-            )
+            preds = distr.sample(torch.Size((num_samples or self.hparams.num_samples,)))
             preds[..., assign_index, :] = preds[..., pred_index, :]
             return self._format_preds(
                 self.hparams.patch_size, preds, self.hparams.target_dim

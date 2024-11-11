@@ -342,9 +342,7 @@ class MoiraiForecast(L.LightningModule):
                 past_feat_dynamic_real,
                 past_observed_feat_dynamic_real,
             )
-            preds = distr.sample(
-                torch.Size((num_samples or self.hparams.num_samples,))
-            )
+            preds = distr.sample(torch.Size((num_samples or self.hparams.num_samples,)))
             return self._format_preds(
                 self.hparams.patch_size, preds, past_target.shape[-1]
             )
