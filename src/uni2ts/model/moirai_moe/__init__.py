@@ -13,14 +13,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from .finetune import MoiraiFinetune
-from .forecast import MoiraiForecast
-from .module import MoiraiModule
-from .pretrain import MoiraiPretrain
+from .forecast import MoiraiMoEForecast
+from .module import MoiraiMoEModule
 
 __all__ = [
-    "MoiraiFinetune",
-    "MoiraiForecast",
-    "MoiraiModule",
-    "MoiraiPretrain",
+    "MoiraiMoEForecast",
+    "MoiraiMoEModule",
 ]

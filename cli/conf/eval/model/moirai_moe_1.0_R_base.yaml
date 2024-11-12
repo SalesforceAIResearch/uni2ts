@@ -1,8 +1,7 @@
-_target_: uni2ts.model.moirai.MoiraiForecast
+_target_: uni2ts.model.moirai_moe.MoiraiMoEForecast
 module:
-  _target_: uni2ts.model.moirai.MoiraiMoEModule.from_pretrained
+  _target_: uni2ts.model.moirai_moe.MoiraiMoEModule.from_pretrained
   pretrained_model_name_or_path: Salesforce/moirai-moe-1.0-R-base
-mode: autoregressive
 num_samples: 100
 patch_size: 16
 context_length: ???

@@ -148,7 +148,7 @@ class MoiraiMoEModule(
         patch_size: Int[torch.Tensor, "*batch seq_len"],
     ) -> Distribution:
         """
-        Defines the forward pass of MoiraiModule.
+        Defines the forward pass of MoiraiMoEModule.
         This method expects processed inputs.
 
         1. Apply scaling to observations

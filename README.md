@@ -2,11 +2,13 @@
 
 Uni2TS is a PyTorch based library for research and applications related to Time Series Forecasting. It provides a unified framework for large-scale pre-training, fine-tuning, inference, and evaluation of Universal Time Series Transformers.
 
-Related reading: [Moirai Paper](https://arxiv.org/abs/2402.02592), [Moirai Salesforce Blog](https://blog.salesforceairesearch.com/moirai/), [Moirai-MoE Paper](https://arxiv.org/abs/2410.10469), [Moirai-MoE AI Horizon Forecast Blog](https://aihorizonforecast.substack.com/p/moirai-moe-upgrading-moirai-with), [Moirai-MoE Jiqizhixin Blog](https://mp.weixin.qq.com/s/LQvlgxx9vU965Yzy6RuBfQ).
+Related reading: [Moirai Paper](https://arxiv.org/abs/2402.02592), [Moirai Salesforce Blog](https://blog.salesforceairesearch.com/moirai/), [Moirai-MoE Paper](https://arxiv.org/abs/2410.10469), [Moirai-MoE Salesforce Blog](https://www.salesforce.com/blog/time-series-morai-moe/), [Moirai-MoE AI Horizon Forecast Blog](https://aihorizonforecast.substack.com/p/moirai-moe-upgrading-moirai-with), [Moirai-MoE Jiqizhixin Blog](https://mp.weixin.qq.com/s/LQvlgxx9vU965Yzy6RuBfQ).
 
 ## 🎉 What's New
 
-* Oct 2024: A new model Moirai-MoE! The preprint is available on [arXiv](https://arxiv.org/abs/2410.10469), along with model weights of [small](https://huggingface.co/Salesforce/moirai-moe-1.0-R-small) and [base](https://huggingface.co/Salesforce/moirai-moe-1.0-R-base), and [code](https://github.com/SalesforceAIResearch/uni2ts/tree/main/project/moirai-moe-1) to get started.
+* Nov 2024: The first general time series forecasting benchmark [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval) is released. Moirai-Large achieves the best performance in the [Leaderboard](https://huggingface.co/spaces/Salesforce/GIFT-Eval)!
+
+* Oct 2024: A new model Moirai-MoE! The preprint is available on [arXiv](https://arxiv.org/abs/2410.10469), along with the model weights of [Moirai-MoE-Small](https://huggingface.co/Salesforce/moirai-moe-1.0-R-small) and [Moirai-MoE-Base](https://huggingface.co/Salesforce/moirai-moe-1.0-R-base). Getting started with [inference code](https://github.com/SalesforceAIResearch/uni2ts/tree/main/project/moirai-moe-1) and [notebook examples](https://github.com/SalesforceAIResearch/uni2ts/tree/main/example)!
 
 * Sep 2024: Released [Evaluation Code](https://github.com/SalesforceAIResearch/uni2ts/tree/main/project/benchmarks) of [TimesFM](https://arxiv.org/abs/2310.10688), [Chronos](https://arxiv.org/abs/2403.07815) and [VisionTS](https://arxiv.org/abs/2408.17253) on Monash, LSF and PF benchmarks.
 
@@ -15,22 +17,6 @@ Related reading: [Moirai Paper](https://arxiv.org/abs/2402.02592), [Moirai Sales
 * May 2024: The [Moirai Paper](https://arxiv.org/abs/2402.02592) has been accepted to ICML 2024 as an Oral presentation!
 
 * Mar 2024: Release of Uni2TS library, along with [Moirai Paper](https://arxiv.org/abs/2402.02592), [Moirai-1.0-R Models](https://huggingface.co/collections/Salesforce/moirai-10-r-models-65c8d3a94c51428c300e0742), and [LOTSA Data](https://huggingface.co/datasets/Salesforce/lotsa_data/).
-
-## ✅ TODO
-
-- [ ] Improve docstrings and documentation
-
-[//]: # (- [ ] Support more pre-training paradigms)
-
-[//]: # (  - [ ] &#40;Non-&#41;Contrastive learning)
-
-[//]: # (  - [ ] Masked Autoencoder)
-
-[//]: # (  - [ ] Next token prediction)
-
-[//]: # (- [ ] Decoder Transformer)
-
-[//]: # (- [ ] Data augmentations - down sampling, subsampling, aggregation)
 
 ## ⚙️ Installation
 
@@ -56,6 +42,11 @@ pip install -e '.[notebook]'
 touch .env
 ```
 
+We also support installation via PyPI.
+```shell
+pip install uni2ts
+```
+
 ## 🏃 Getting Started
 
 Let's see a simple example on how to use Uni2TS to make zero-shot forecasts from a pre-trained model. 
@@ -72,8 +63,9 @@ from huggingface_hub import hf_hub_download
 
 from uni2ts.eval_util.plot import plot_single
 from uni2ts.model.moirai import MoiraiForecast, MoiraiModule
+from uni2ts.model.moirai_moe import MoiraiMoEForecast, MoiraiMoEModule
 
-
+MODEL = "moirai-moe"  # model name: choose from {'moirai', 'moirai-moe'}
 SIZE = "small"  # model size: choose from {'small', 'base', 'large'}
 PDT = 20  # prediction length: any positive integer
 CTX = 200  # context length: any positive integer
@@ -104,16 +96,28 @@ test_data = test_template.generate_instances(
 )
 
 # Prepare pre-trained model by downloading model weights from huggingface hub
-model = MoiraiForecast(
-    module=MoiraiModule.from_pretrained(f"Salesforce/moirai-1.0-R-{SIZE}"),
-    prediction_length=PDT,
-    context_length=CTX,
-    patch_size=PSZ,
-    num_samples=100,
-    target_dim=1,
-    feat_dynamic_real_dim=ds.num_feat_dynamic_real,
-    past_feat_dynamic_real_dim=ds.num_past_feat_dynamic_real,
-)
+if MODEL == "moirai":
+    model = MoiraiForecast(
+        module=MoiraiModule.from_pretrained(f"Salesforce/moirai-1.1-R-{SIZE}"),
+        prediction_length=PDT,
+        context_length=CTX,
+        patch_size=PSZ,
+        num_samples=100,
+        target_dim=1,
+        feat_dynamic_real_dim=ds.num_feat_dynamic_real,
+        past_feat_dynamic_real_dim=ds.num_past_feat_dynamic_real,
+    )
+elif MODEL == "moirai-moe":
+    model = MoiraiMoEForecast(
+        module=MoiraiMoEModule.from_pretrained(f"Salesforce/moirai-moe-1.0-R-{SIZE}"),
+        prediction_length=PDT,
+        context_length=CTX,
+        patch_size=16,
+        num_samples=100,
+        target_dim=1,
+        feat_dynamic_real_dim=ds.num_feat_dynamic_real,
+        past_feat_dynamic_real_dim=ds.num_past_feat_dynamic_real,
+    )
 
 predictor = model.create_predictor(batch_size=BSZ)
 forecasts = predictor.predict(test_data.input)
@@ -243,7 +247,14 @@ If you're using this repository in your research or applications, please cite us
   year={2024}
 }
 
-@inproceedings{woo2024unified,
+@article{aksu2024gifteval,
+  title={GIFT-Eval: A Benchmark For General Time Series Forecasting Model Evaluation},
+  author={Aksu, Taha and Woo, Gerald and Liu, Juncheng and Liu, Xu and Liu, Chenghao and Savarese, Silvio and Xiong, Caiming and Sahoo, Doyen},
+  journal={arXiv preprint arXiv:2410.10393},
+  year={2024}
+}
+
+@inproceedings{woo2024moirai,
   title={Unified Training of Universal Time Series Forecasting Transformers},
   author={Woo, Gerald and Liu, Chenghao and Kumar, Akshat and Xiong, Caiming and Savarese, Silvio and Sahoo, Doyen},
   booktitle={Forty-first International Conference on Machine Learning},

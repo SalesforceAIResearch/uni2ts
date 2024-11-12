@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 title: Unified Training of Universal Time Series Forecasting Transformers
-message: If you find Chronos models useful for your research, please consider citing the associated paper.
+message: If you find Moirai useful for your research, please consider citing the associated paper.
 authors:
   - family-names: Woo
     given-names: Gerald

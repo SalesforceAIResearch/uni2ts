@@ -27,6 +27,7 @@ from gluonts.torch import PyTorchPredictor
 from gluonts.transform import (
     AddObservedValuesIndicator,
     AsNumpyArray,
+    CausalMeanValueImputation,
     ExpandDimArray,
     TestSplitSampler,
     Transformation,
@@ -38,7 +39,7 @@ from torch.distributions import Distribution
 from uni2ts.common.torch_util import safe_div
 from uni2ts.loss.packed import PackedNLLLoss as _PackedNLLLoss
 
-from .module import MoiraiModule
+from .module import MoiraiMoEModule
 
 
 class SampleNLLLoss(_PackedNLLLoss):
@@ -69,7 +70,7 @@ class SampleNLLLoss(_PackedNLLLoss):
         return (loss * mask).sum(dim=(-1, -2))
 
 
-class MoiraiForecast(L.LightningModule):
+class MoiraiMoEForecast(L.LightningModule):
     def __init__(
         self,
         prediction_length: int,
@@ -78,8 +79,8 @@ class MoiraiForecast(L.LightningModule):
         past_feat_dynamic_real_dim: int,
         context_length: int,
         module_kwargs: Optional[dict[str, Any]] = None,
-        module: Optional[MoiraiModule] = None,
-        patch_size: int | str = "auto",
+        module: Optional[MoiraiMoEModule] = None,
+        patch_size: int = 16,
         num_samples: int = 100,
     ):
         assert (module is not None) or (
@@ -87,7 +88,7 @@ class MoiraiForecast(L.LightningModule):
         ), "if module is not provided, module_kwargs is required"
         super().__init__()
         self.save_hyperparameters(ignore=["module"])
-        self.module = MoiraiModule(**module_kwargs) if module is None else module
+        self.module = MoiraiMoEModule(**module_kwargs) if module is None else module
         self.per_sample_loss_func = SampleNLLLoss()
 
     @contextmanager
@@ -252,119 +253,11 @@ class MoiraiForecast(L.LightningModule):
         ] = None,
         num_samples: Optional[int] = None,
     ) -> Float[torch.Tensor, "batch sample future_time *tgt"]:
-        if self.hparams.patch_size == "auto":
-            val_loss = []
-            preds = []
-            for patch_size in self.module.patch_sizes:
-                val_loss.append(
-                    self._val_loss(
-                        patch_size=patch_size,
-                        target=past_target[..., : self.past_length, :],
-                        observed_target=past_observed_target[
-                            ..., : self.past_length, :
-                        ],
-                        is_pad=past_is_pad[..., : self.past_length],
-                        feat_dynamic_real=(
-                            feat_dynamic_real[..., : self.past_length, :]
-                            if feat_dynamic_real is not None
-                            else None
-                        ),
-                        observed_feat_dynamic_real=(
-                            observed_feat_dynamic_real[..., : self.past_length, :]
-                            if observed_feat_dynamic_real is not None
-                            else None
-                        ),
-                        past_feat_dynamic_real=(
-                            past_feat_dynamic_real[
-                                ..., : self.hparams.context_length, :
-                            ]
-                            if past_feat_dynamic_real is not None
-                            else None
-                        ),
-                        past_observed_feat_dynamic_real=(
-                            past_observed_feat_dynamic_real[
-                                ..., : self.hparams.context_length, :
-                            ]
-                            if past_observed_feat_dynamic_real is not None
-                            else None
-                        ),
-                    )
-                )
-                distr = self._get_distr(
-                    patch_size,
-                    past_target[..., -self.hparams.context_length :, :],
-                    past_observed_target[..., -self.hparams.context_length :, :],
-                    past_is_pad[..., -self.hparams.context_length :],
-                    (
-                        feat_dynamic_real[..., -self.past_length :, :]
-                        if feat_dynamic_real is not None
-                        else None
-                    ),
-                    (
-                        observed_feat_dynamic_real[..., -self.past_length :, :]
-                        if observed_feat_dynamic_real is not None
-                        else None
-                    ),
-                    (
-                        past_feat_dynamic_real[..., -self.hparams.context_length :, :]
-                        if past_feat_dynamic_real is not None
-                        else None
-                    ),
-                    (
-                        past_observed_feat_dynamic_real[
-                            ..., -self.hparams.context_length :, :
-                        ]
-                        if past_observed_feat_dynamic_real is not None
-                        else None
-                    ),
-                )
-                preds.append(
-                    self._format_preds(
-                        patch_size,
-                        distr.sample(
-                            torch.Size((num_samples or self.hparams.num_samples,))
-                        ),
-                        past_target.shape[-1],
-                    )
-                )
-            val_loss = torch.stack(val_loss)
-            preds = torch.stack(preds)
-            idx = val_loss.argmin(dim=0)
-            return preds[idx, torch.arange(len(idx), device=idx.device)]
-        else:
-            distr = self._get_distr(
-                self.hparams.patch_size,
-                past_target,
-                past_observed_target,
-                past_is_pad,
-                feat_dynamic_real,
-                observed_feat_dynamic_real,
-                past_feat_dynamic_real,
-                past_observed_feat_dynamic_real,
-            )
-            preds = distr.sample(torch.Size((num_samples or self.hparams.num_samples,)))
-            return self._format_preds(
-                self.hparams.patch_size, preds, past_target.shape[-1]
-            )
+        context_step = self.context_token_length(self.hparams.patch_size)
+        context_token = self.hparams.target_dim * context_step
+        predict_step = self.prediction_token_length(self.hparams.patch_size)
+        predict_token = self.hparams.target_dim * predict_step
 
-    def _val_loss(
-        self,
-        patch_size: int,
-        target: Float[torch.Tensor, "batch time tgt"],
-        observed_target: Bool[torch.Tensor, "batch time tgt"],
-        is_pad: Bool[torch.Tensor, "batch time"],
-        feat_dynamic_real: Optional[Float[torch.Tensor, "batch time feat"]] = None,
-        observed_feat_dynamic_real: Optional[
-            Float[torch.Tensor, "batch time feat"]
-        ] = None,
-        past_feat_dynamic_real: Optional[
-            Float[torch.Tensor, "batch past_time past_feat"]
-        ] = None,
-        past_observed_feat_dynamic_real: Optional[
-            Float[torch.Tensor, "batch past_time past_feat"]
-        ] = None,
-    ) -> Float[torch.Tensor, "batch"]:
-        # convert format
         (
             target,
             observed_mask,
@@ -373,67 +266,7 @@ class MoiraiForecast(L.LightningModule):
             variate_id,
             prediction_mask,
         ) = self._convert(
-            patch_size,
-            past_target=target[..., : self.hparams.context_length, :],
-            past_observed_target=observed_target[..., : self.hparams.context_length, :],
-            past_is_pad=is_pad[..., : self.hparams.context_length],
-            future_target=target[..., self.hparams.context_length :, :],
-            future_observed_target=observed_target[
-                ..., self.hparams.context_length :, :
-            ],
-            future_is_pad=is_pad[..., self.hparams.context_length :],
-            feat_dynamic_real=feat_dynamic_real,
-            observed_feat_dynamic_real=observed_feat_dynamic_real,
-            past_feat_dynamic_real=past_feat_dynamic_real,
-            past_observed_feat_dynamic_real=past_observed_feat_dynamic_real,
-        )
-        # get predictions
-        distr = self.module(
-            target,
-            observed_mask,
-            sample_id,
-            time_id,
-            variate_id,
-            prediction_mask,
-            torch.ones_like(time_id, dtype=torch.long) * patch_size,
-        )
-        val_loss = self.per_sample_loss_func(
-            pred=distr,
-            target=target,
-            prediction_mask=prediction_mask,
-            observed_mask=observed_mask,
-            sample_id=sample_id,
-            variate_id=variate_id,
-        )
-        return val_loss
-
-    def _get_distr(
-        self,
-        patch_size: int,
-        past_target: Float[torch.Tensor, "batch past_time tgt"],
-        past_observed_target: Bool[torch.Tensor, "batch past_time tgt"],
-        past_is_pad: Bool[torch.Tensor, "batch past_time"],
-        feat_dynamic_real: Optional[Float[torch.Tensor, "batch time feat"]] = None,
-        observed_feat_dynamic_real: Optional[
-            Float[torch.Tensor, "batch time feat"]
-        ] = None,
-        past_feat_dynamic_real: Optional[
-            Float[torch.Tensor, "batch past_time past_feat"]
-        ] = None,
-        past_observed_feat_dynamic_real: Optional[
-            Float[torch.Tensor, "batch past_time past_feat"]
-        ] = None,
-    ) -> Distribution:
-        # convert format
-        (
-            target,
-            observed_mask,
-            sample_id,
-            time_id,
-            variate_id,
-            prediction_mask,
-        ) = self._convert(
-            patch_size,
+            self.hparams.patch_size,
             past_target,
             past_observed_target,
             past_is_pad,
@@ -442,18 +275,96 @@ class MoiraiForecast(L.LightningModule):
             past_feat_dynamic_real=past_feat_dynamic_real,
             past_observed_feat_dynamic_real=past_observed_feat_dynamic_real,
         )
-
-        # get predictions
-        distr = self.module(
-            target,
-            observed_mask,
-            sample_id,
-            time_id,
-            variate_id,
-            prediction_mask,
-            torch.ones_like(time_id, dtype=torch.long) * patch_size,
+        patch_size = (
+            torch.ones_like(time_id, dtype=torch.long) * self.hparams.patch_size
         )
-        return distr
+
+        pred_index = torch.arange(
+            start=context_step - 1, end=context_token, step=context_step
+        )
+        assign_index = torch.arange(
+            start=context_token,
+            end=context_token + predict_token,
+            step=predict_step,
+        )
+
+        if predict_step == 1:
+            distr = self.module(
+                target,
+                observed_mask,
+                sample_id,
+                time_id,
+                variate_id,
+                prediction_mask,
+                patch_size,
+            )
+            preds = distr.sample(torch.Size((num_samples or self.hparams.num_samples,)))
+            preds[..., assign_index, :] = preds[..., pred_index, :]
+            return self._format_preds(
+                self.hparams.patch_size, preds, self.hparams.target_dim
+            )
+        else:
+            distr = self.module(
+                target,
+                observed_mask,
+                sample_id,
+                time_id,
+                variate_id,
+                prediction_mask,
+                patch_size,
+            )
+            preds = distr.sample(torch.Size((self.hparams.num_samples,)))
+
+            expand_target = target.unsqueeze(0).repeat(
+                self.hparams.num_samples, 1, 1, 1
+            )
+            expand_prediction_mask = prediction_mask.unsqueeze(0).repeat(
+                self.hparams.num_samples, 1, 1
+            )
+            expand_observed_mask = observed_mask.unsqueeze(0).expand(
+                self.hparams.num_samples, -1, -1, -1
+            )
+            expand_sample_id = sample_id.unsqueeze(0).expand(
+                self.hparams.num_samples, -1, -1
+            )
+            expand_time_id = time_id.unsqueeze(0).expand(
+                self.hparams.num_samples, -1, -1
+            )
+            expand_variate_id = variate_id.unsqueeze(0).expand(
+                self.hparams.num_samples, -1, -1
+            )
+            expand_patch_size = patch_size.unsqueeze(0).expand(
+                self.hparams.num_samples, -1, -1
+            )
+
+            expand_target[..., assign_index, :] = preds[..., pred_index, :]
+            expand_prediction_mask[..., assign_index] = False
+
+            remain_step = predict_step - 1
+            while remain_step > 0:
+                distr = self.module(
+                    expand_target,
+                    expand_observed_mask,
+                    expand_sample_id,
+                    expand_time_id,
+                    expand_variate_id,
+                    expand_prediction_mask,
+                    expand_patch_size,
+                )
+                preds = distr.sample(torch.Size((1,)))
+                _, _, bs, token, ps = preds.shape
+                preds = preds.view(-1, bs, token, ps)
+
+                pred_index = assign_index
+                assign_index = assign_index + 1
+                expand_target[..., assign_index, :] = preds[..., pred_index, :]
+                expand_prediction_mask[..., assign_index] = False
+
+                remain_step -= 1
+
+            return self._format_preds(
+                self.hparams.patch_size, expand_target, self.hparams.target_dim
+            )
 
     @staticmethod
     def _patched_seq_pad(
@@ -945,12 +856,20 @@ class MoiraiForecast(L.LightningModule):
             dtype=np.float32,
         )
         if self.hparams.target_dim == 1:
+            transform += AddObservedValuesIndicator(
+                target_field="target",
+                output_field="observed_target",
+                imputation_method=CausalMeanValueImputation(),
+                dtype=bool,
+            )
             transform += ExpandDimArray(field="target", axis=0)
-        transform += AddObservedValuesIndicator(
-            target_field="target",
-            output_field="observed_target",
-            dtype=bool,
-        )
+            transform += ExpandDimArray(field="observed_target", axis=0)
+        else:
+            transform += AddObservedValuesIndicator(
+                target_field="target",
+                output_field="observed_target",
+                dtype=bool,
+            )
 
         if self.hparams.feat_dynamic_real_dim > 0:
             transform += AsNumpyArray(
