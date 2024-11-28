@@ -29,6 +29,9 @@ requires-python = ">=3.10"
 authors = [
   {name = "Gerald Woo", email = "gwoo@salesforce.com"},
   {name = "Chenghao Liu", email = "chenghao.liu@salesforce.com"},
+  {name = "Juncheng Liu", email = "juncheng.liu@salesforce.com"},
+  {name = "Taha Aksu", email = "iaksu@salesforce.com"},
+  {name = "Xu Liu", email = "xu.liu@salesforce.com"},
   {name = "Akshat Kumar"},
   {name = "Caiming Xiong"},
   {name = "Silvio Savarese"},
