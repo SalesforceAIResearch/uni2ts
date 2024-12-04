@@ -1,0 +1,51 @@
+# This workflow will upload a Python Package using Twine to Test PyPi (Full release) when a workflow_dispatch event is triggered.
+
+name: Manually Publish Package
+
+on: workflow_dispatch
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install hatch twine
+
+    - name: Build package
+      run: |
+        hatch build
+
+    - name: Run package validators
+      run: |
+        twine check dist/*
+        
+        # Test install from wheel
+        pip install dist/*.whl
+        python -c "import uni2ts; print(uni2ts.__version__)"
+
+    - name: Upload to PyPI
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      run: |
+        twine upload --verbose dist/*
+
+    - name: Verify PyPI publication
+      run: |
+        sleep 60
+        # Extract version from tag
+        VERSION=${GITHUB_REF#refs/tags/}  # removes refs/tags/
+        echo "Installing version: $VERSION"
+        pip install uni2ts==$VERSION
+        python -c "import uni2ts; print(uni2ts.__version__)"
