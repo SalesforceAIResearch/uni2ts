@@ -55,7 +55,10 @@ jobs:
     - name: Verify Test PyPI publication
       run: |
         sleep 60
-        pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ uni2ts==${GITHUB_REF#refs/tags/v}
+        # Extract version from tag
+        VERSION=${GITHUB_REF#refs/tags/}  # removes refs/tags/
+        echo "Installing version: $VERSION"
+        pip install --index-url https://test.pypi.org/simple/ uni2ts==${VERSION}
         python -c "import uni2ts; print(uni2ts.__version__)"
 
   publish-prod:
@@ -90,5 +93,8 @@ jobs:
     - name: Verify PyPI publication
       run: |
         sleep 60
-        pip install uni2ts==${GITHUB_REF#refs/tags/v}
+        # Extract version from tag
+        VERSION=${GITHUB_REF#refs/tags/}  # removes refs/tags/
+        echo "Installing version: $VERSION"
+        pip install uni2ts==$VERSION
         python -c "import uni2ts; print(uni2ts.__version__)"
