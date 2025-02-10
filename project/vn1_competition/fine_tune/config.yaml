@@ -28,25 +28,26 @@ trainer:
     - _target_: lightning.pytorch.callbacks.ModelCheckpoint
       dirpath: ${hydra:runtime.output_dir}/checkpoints
       monitor: val/PackedNLLLoss
-      save_weights_only: true                   # 改为1，只保存最后一个检查点
+      save_weights_only: true
+      mode: min
+      save_top_k: 1
       every_n_epochs: 1
-      save_last: true   
-    # - _target_: lightning.pytorch.callbacks.EarlyStopping 
-    #   monitor: val/PackedNLLLoss
-    #   min_delta: 0.0
-    #   patience: 5
-    #   mode: min
-    #   strict: false
-    #   verbose: true
-  max_epochs: 5
+    - _target_: lightning.pytorch.callbacks.EarlyStopping 
+      monitor: val/PackedNLLLoss
+      min_delta: 0.0
+      patience: 5
+      mode: min
+      strict: false
+      verbose: true
+  max_epochs: 100
   enable_progress_bar: true
-  accumulate_grad_batches: 1
+  accumulate_grad_batches: 1       ##########################################################################
   gradient_clip_val: 1.0
   gradient_clip_algorithm: norm
 train_dataloader:
   _target_: uni2ts.data.loader.DataLoader
-  batch_size: 64               ##########################################################################
-  batch_size_factor: 1.0
+  batch_size: 128               ##########################################################################
+  batch_size_factor: 2.0        ##########################################################################
   cycle: true                ##########################################################################
   num_batches_per_epoch: 100 ##########################################################################
   shuffle: true
@@ -64,8 +65,8 @@ train_dataloader:
   persistent_workers: true
 val_dataloader:
   _target_: uni2ts.data.loader.DataLoader
-  batch_size: 64                       ##########################################################################
-  batch_size_factor: 1.0
+  batch_size: 128                       ##########################################################################
+  batch_size_factor: 2.0               ##########################################################################
   cycle: false
   num_batches_per_epoch: null
   shuffle: false

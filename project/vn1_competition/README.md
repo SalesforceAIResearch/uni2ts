@@ -58,7 +58,7 @@ To reproduce the experimental results, refer to this [blog](https://zhuanlan.zhi
    ```
 5. Replace the variable `pretrained_model_name_or_path` in the configuration file with your own path, then run the following command to fine-tune the `Moirai-base` model:
    ```bash
-   python -m cli.train -cp ../project/vn1-competition/fine-tune run_name=run1
+   python -m cli.train -cp ../project/vn1_competition/fine_tune run_name=run1
    ```
 6. Replace the weight file path in the `main.py` file under the `src` directory and run `main.py`.
 

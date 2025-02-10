@@ -37,27 +37,26 @@ from torch.distributions import Distribution
 
 from uni2ts.common.torch_util import safe_div
 from uni2ts.loss.packed import PackedNLLLoss as _PackedNLLLoss
-
 from uni2ts.model.moirai import MoiraiModule
 
 
 class SampleNLLLoss(_PackedNLLLoss):
     def reduce_loss(
         self,
-        loss: Float[torch.Tensor, "batch seq_len #dim"],  #"dim"这个维度表示patch中含的时间步数
+        loss: Float[torch.Tensor, "batch seq_len #dim"],
         prediction_mask: Optional[Bool[torch.Tensor, "batch seq_len"]],
         observed_mask: Optional[Bool[torch.Tensor, "batch seq_len #dim"]],
         sample_id: Optional[Int[torch.Tensor, "batch seq_len"]],
         variate_id: Optional[Int[torch.Tensor, "batch seq_len"]],
     ) -> Float[torch.Tensor, "batch"]:
-        id_mask = torch.logical_and(        #生成掩码，形状为(batch, seq_len, seq_len)，若（x，y，z）为真，则表示时刻y、z属于同一样本的同一变量的patch
+        id_mask = torch.logical_and(
             torch.eq(sample_id.unsqueeze(-1), sample_id.unsqueeze(-2)),
             torch.eq(variate_id.unsqueeze(-1), variate_id.unsqueeze(-2)),
         )
         mask = prediction_mask.unsqueeze(-1) * observed_mask
-        tobs = reduce(        #tobs的每个元素表示每个patch中的总有效观测数
-            id_mask                
-            * reduce(    #沿dim维度求和，计算要预测的每个patch中的有效观测数
+        tobs = reduce(
+            id_mask
+            * reduce(
                 mask,
                 "... seq dim -> ... 1 seq",
                 "sum",
@@ -65,8 +64,8 @@ class SampleNLLLoss(_PackedNLLLoss):
             "... seq1 seq2 -> ... seq1 1",
             "sum",
         )
-        loss = safe_div(loss, tobs)#归一化损失
-        return (loss * mask).sum(dim=(-1, -2))#一个批次含batch个箱子，对每个箱子中的所有有效预测点的loss求和，最后形状为（batch，）
+        loss = safe_div(loss, tobs)
+        return (loss * mask).sum(dim=(-1, -2))
 
 
 class Forecast(L.LightningModule):
@@ -133,8 +132,8 @@ class Forecast(L.LightningModule):
         if self.hparams.past_feat_dynamic_real_dim > 0:
             past_ts_fields.append("past_feat_dynamic_real")
             past_ts_fields.append("past_observed_feat_dynamic_real")
-        instance_splitter = TFTInstanceSplitter( #实例分割器配置
-            instance_sampler=TestSplitSampler(), # 测试数据采样器
+        instance_splitter = TFTInstanceSplitter(
+            instance_sampler=TestSplitSampler(),
             past_length=self.past_length,
             future_length=self.hparams.prediction_length,
             observed_value_field="observed_target",
@@ -150,7 +149,7 @@ class Forecast(L.LightningModule):
             device=device,
         )
 
-    def describe_inputs(self, batch_size: int = 1) -> InputSpec: #定义了模型输入的规范
+    def describe_inputs(self, batch_size: int = 1) -> InputSpec:
         data = {
             "past_target": Input(
                 shape=(
@@ -255,12 +254,9 @@ class Forecast(L.LightningModule):
         if self.hparams.patch_size == "auto":
             val_loss = []
             preds = []
-            selected_patch_sizes=[8,16]
+            selected_patch_sizes = [8, 16]
             for patch_size in selected_patch_sizes:
                 val_loss.append(
-                    # 计算不同patch_size的损失，注意：一条完整的时间序列通过split后会分成input和label两部分（代表过去段和预测段）
-                    #这里计算的预测的损失是针对input的，即在input中再分成过去段和预测段（截取input也就是past_target的0~context_length+prediction_length），目的是用来选取合适的patch_size
-                    #但选择的最优patch_size是针对input的，对于label未必是最优的
                     self._val_loss(
                         patch_size=patch_size,
                         target=past_target[..., : self.past_length, :],
@@ -328,13 +324,13 @@ class Forecast(L.LightningModule):
                         distr.sample(
                             torch.Size((num_samples or self.hparams.num_samples,))
                         ),
-                        past_target.shape[-1],  #变量数目
+                        past_target.shape[-1],
                     )
                 )
-            val_loss = torch.stack(val_loss)  #形状为【num of patch_size,batch】
+            val_loss = torch.stack(val_loss)
             preds = torch.stack(preds)
-            idx = val_loss.argmin(dim=0) #对每个批次，寻找损失最小的那个patch_size的索引，形状为【batch】
-            return preds[idx, torch.arange(len(idx), device=idx.device)]   #从多个patch_sized的预测结果中，选择损失最小的那个patch_size的预测结果
+            idx = val_loss.argmin(dim=0)
+            return preds[idx, torch.arange(len(idx), device=idx.device)]
         else:
             distr = self._get_distr(
                 self.hparams.patch_size,
@@ -368,7 +364,6 @@ class Forecast(L.LightningModule):
             Float[torch.Tensor, "batch past_time past_feat"]
         ] = None,
     ) -> Float[torch.Tensor, "batch"]:
-        # convert format
         (
             target,
             observed_mask,
@@ -391,9 +386,8 @@ class Forecast(L.LightningModule):
             past_feat_dynamic_real=past_feat_dynamic_real,
             past_observed_feat_dynamic_real=past_observed_feat_dynamic_real,
         )
-        # get predictions
         distr = self.module(
-            target,  #这里的target中目标序列的的长度为context_length+prediction_length
+            target,
             observed_mask,
             sample_id,
             time_id,
@@ -428,7 +422,6 @@ class Forecast(L.LightningModule):
             Float[torch.Tensor, "batch past_time past_feat"]
         ] = None,
     ) -> Distribution:
-        # convert format
         (
             target,
             observed_mask,
@@ -447,7 +440,6 @@ class Forecast(L.LightningModule):
             past_observed_feat_dynamic_real=past_observed_feat_dynamic_real,
         )
 
-        # get predictions
         distr = self.module(
             target,
             observed_mask,
@@ -458,8 +450,7 @@ class Forecast(L.LightningModule):
             torch.ones_like(time_id, dtype=torch.long) * patch_size,
         )
         return distr
- 
-    # 将序列填充到patch_size的倍数,确保序列长度是patch_size的倍数,
+
     @staticmethod
     def _patched_seq_pad(
         patch_size: int,
@@ -485,22 +476,17 @@ class Forecast(L.LightningModule):
     ) -> tuple[
         Int[torch.Tensor, "batch past_token"], Int[torch.Tensor, "batch future_token"]
     ]:
-        #补丁处理和降维，将（batch,time,var）->（batch,patch_num）,其中time=patch_size*patch_num
         past_seq_id = reduce(
             self._patched_seq_pad(patch_size, past_observed_target, -2, left=True),
             "... (seq patch) dim -> ... seq",
-            "max", #在每个补丁内取最大值,因past_observed_target的值不是0就是1，所以取最大值就是1或0，表示某个补丁是否被观察到（否则就是填充的或未被观察的）
+            "max",
             patch=patch_size,
         )
-        # 因past_seq_id的值不是0就是1，所以返回的序列前面都是0（表示填充的序列），后面是单调递增的序列1，2，3。。。。
         past_seq_id = torch.clamp(
             past_seq_id.cummax(dim=-1).values.cumsum(dim=-1) - 1, min=0
         )
-        # 获取批次形状字符串
         batch_shape = " ".join(map(str, past_observed_target.shape[:-2]))
-        # 生成未来序列id
         future_seq_id = (
-            #创建基础序列号
             repeat(
                 torch.arange(
                     self.prediction_token_length(patch_size),
@@ -508,13 +494,15 @@ class Forecast(L.LightningModule):
                 ),
                 f"prediction -> {batch_shape} prediction",
             )
-            #添加偏移：历史序列最大ID + 1
             + past_seq_id.max(dim=-1, keepdim=True).values
             + 1
         )
-        return past_seq_id, future_seq_id #返回历史序列的代表时间位置信息的id序列和未来序列的代表时间位置信息的id
+        return (
+            past_seq_id,
+            future_seq_id,
+        )
 
-    def _convert(       #类似于finetune.py的transform方法
+    def _convert(
         self,
         patch_size: int,
         past_target: Float[torch.Tensor, "batch past_time tgt"],
@@ -536,12 +524,12 @@ class Forecast(L.LightningModule):
             Float[torch.Tensor, "batch past_time past_feat"]
         ] = None,
     ) -> tuple[
-        Float[torch.Tensor, "batch combine_seq patch"],  # target
-        Bool[torch.Tensor, "batch combine_seq patch"],  # observed_mask
-        Int[torch.Tensor, "batch combine_seq"],  # sample_id
-        Int[torch.Tensor, "batch combine_seq"],  # time_id
-        Int[torch.Tensor, "batch combine_seq"],  # variate_id
-        Bool[torch.Tensor, "batch combine_seq"],  # prediction_mask
+        Float[torch.Tensor, "batch combine_seq patch"],
+        Bool[torch.Tensor, "batch combine_seq patch"],
+        Int[torch.Tensor, "batch combine_seq"],
+        Int[torch.Tensor, "batch combine_seq"],
+        Int[torch.Tensor, "batch combine_seq"],
+        Bool[torch.Tensor, "batch combine_seq"],
     ]:
         batch_shape = past_target.shape[:-2]
         device = past_target.device
@@ -553,16 +541,12 @@ class Forecast(L.LightningModule):
         variate_id = []
         prediction_mask = []
         dim_count = 0
-        # 生成历史序列和未来序列的time_id,形状为（batch,past_patch_num）、（batch,future_patch_num）。类似于finetune中一系列变换中的生成time_id的那个变换
         past_seq_id, future_seq_id = self._generate_time_id(
             patch_size, past_observed_target
         )
 
-        if future_target is None: 
-            #如果未来序列不存在，则创建一个全0的未来序列，与过去序列拼接，形成一个完整的时间序列；模型的输入必须包含过去+未来的长度
-            #在val_loss中，输入future_target存在；在get_distr中，输入future_target不存在，因此需要创建一个全0的未来序列
+        if future_target is None:
             future_target = torch.zeros(
-                #形状为（batch,prediction_length,var）
                 batch_shape
                 + (
                     self.hparams.prediction_length,
@@ -572,9 +556,6 @@ class Forecast(L.LightningModule):
                 device=device,
             )
         target.extend(
-            # 步骤1：补丁填充，确保序列长度是patch_size的倍数
-            # 步骤2：维度重排，从 （batch,time,var） 到 （batch,patch_num*var，patch_size） 
-            # 步骤3：补丁大小统一，将所有补丁填充到max_patch_size
             [
                 torch.nn.functional.pad(
                     rearrange(
@@ -670,7 +651,7 @@ class Forecast(L.LightningModule):
                 ),
             ]
         )
-        time_id.extend(  #将历史序列和未来序列的time_id拼接起来，并扩展维度，从（batch,past_patch_num）、（batch,future_patch_num）->（batch,past_patch_num+future_patch_num，var）
+        time_id.extend(
             [past_seq_id] * past_target.shape[-1]
             + [future_seq_id] * past_target.shape[-1]
         )
@@ -708,7 +689,6 @@ class Forecast(L.LightningModule):
                 ),
             ]
         )
-        # 后续的代码都是：如果存在协变量，则进行处理。  即前面的张量都是只包含target，如果序列存在协变量，要像finetune.py那样，将协变量也拼接加入到张量中
         if feat_dynamic_real is not None:
             if observed_feat_dynamic_real is None:
                 raise ValueError(
@@ -923,7 +903,7 @@ class Forecast(L.LightningModule):
                     device=device,
                 )
             )
-        #拼接张量，都在var*patch_num的那个维度上拼接，拼接后的形状为【batch（1），var*time+var*(time-pl)，patch_size/null】
+
         target = torch.cat(target, dim=-2)
         observed_mask = torch.cat(observed_mask, dim=-2)
         sample_id = torch.cat(sample_id, dim=-1)
@@ -939,24 +919,22 @@ class Forecast(L.LightningModule):
             prediction_mask,
         )
 
-    #将预测结果从（sample,batch,var*past_patch_num+var*future_patch_num,max_patch_size）->（batch,sample,future_time,var）
     def _format_preds(
         self,
         patch_size: int,
         preds: Float[torch.Tensor, "sample batch combine_seq patch"],
         target_dim: int,
     ) -> Float[torch.Tensor, "batch sample future_time *tgt"]:
-        start = target_dim * self.context_token_length(patch_size) #预测段开始的位置
-        end = start + target_dim * self.prediction_token_length(patch_size) #预测段结束的位置
+        start = target_dim * self.context_token_length(patch_size)
+        end = start + target_dim * self.prediction_token_length(patch_size)
         preds = preds[..., start:end, :patch_size]
-        preds = rearrange( 
+        preds = rearrange(
             preds,
             "sample ... (dim seq) patch -> ... sample (seq patch) dim",
             dim=target_dim,
         )[..., : self.hparams.prediction_length, :]
         return preds.squeeze(-1)
 
-    #返回一个转换，这个转换用于往字典中加入新的字段，这些字段或是表示协变量的观测掩码，或是表示目标变量的观测掩码
     def get_default_transform(self) -> Transformation:
         transform = AsNumpyArray(
             field="target",

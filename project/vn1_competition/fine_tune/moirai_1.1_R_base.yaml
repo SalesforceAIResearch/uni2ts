@@ -19,13 +19,13 @@ module_kwargs:
   attn_dropout_p: 0.0
   dropout_p: 0.0
   scaling: true
-min_patches: 2           
-min_mask_ratio: 0.05   
-max_mask_ratio: 0.3    
+min_patches: 2           ##############################################
+min_mask_ratio: 0.1      ##############################################
+max_mask_ratio: 0.4     ##############################################
 max_dim: 128     
 loss_func:
   _target_: uni2ts.loss.packed.PackedNLLLoss
-lr: 5e-7                              #############################################
+lr: 5e-8                              #############################################
 weight_decay: 1e-1      
 beta1: 0.9              
 beta2: 0.98              
