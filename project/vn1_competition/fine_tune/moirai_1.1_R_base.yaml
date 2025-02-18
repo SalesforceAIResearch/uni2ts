@@ -2,7 +2,7 @@
 _target_: uni2ts.model.moirai.MoiraiFinetune
 module:    
   _target_: uni2ts.model.moirai.MoiraiModule.from_pretrained
-  pretrained_model_name_or_path: /home/zhangxiaobin/.cache/huggingface/hub/models--Salesforce--moirai-1.1-R-base/snapshots/d63ad77b0688fe857fd0f6aeb33f8df9c73d68f8
+  pretrained_model_name_or_path: Salesforce/moirai-1.1-R-base
 module_kwargs:
   _target_: builtins.dict
   distr_output:
@@ -19,16 +19,16 @@ module_kwargs:
   attn_dropout_p: 0.0
   dropout_p: 0.0
   scaling: true
-min_patches: 2           ##############################################
-min_mask_ratio: 0.1      ##############################################
-max_mask_ratio: 0.4     ##############################################
+min_patches: 2           
+min_mask_ratio: 0.1      
+max_mask_ratio: 0.4     
 max_dim: 128     
 loss_func:
   _target_: uni2ts.loss.packed.PackedNLLLoss
-lr: 5e-8                              #############################################
+lr: 5e-8                              
 weight_decay: 1e-1      
 beta1: 0.9              
 beta2: 0.98              
 
-num_training_steps: 10000                #############################################
+num_training_steps: 10000                
 num_warmup_steps: 0

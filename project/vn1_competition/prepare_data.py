@@ -58,7 +58,6 @@ df_sales.index.name = "timestamp"
 zero_ratios = (df_sales == 0).mean()
 cols_to_drop = zero_ratios[zero_ratios > 0.5].index
 df_sales = df_sales.drop(columns=cols_to_drop)
-print(f"删除了{len(cols_to_drop)}列数据,剩余{df_sales.shape[1]}列")
 
 train_df = df_sales.iloc[:-16, :]
 val_df = df_sales.iloc[:, :]

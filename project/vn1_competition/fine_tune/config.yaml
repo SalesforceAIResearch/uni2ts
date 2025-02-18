@@ -15,7 +15,7 @@ trainer:
   _target_: lightning.Trainer
   accelerator: auto
   strategy: auto
-  devices: [0,1,2,3]            ##########################################################################
+  devices: [0,1,2,3]            
   num_nodes: 1
   precision: 32
   logger:
@@ -41,32 +41,32 @@ trainer:
       verbose: true
   max_epochs: 100
   enable_progress_bar: true
-  accumulate_grad_batches: 1       ##########################################################################
+  accumulate_grad_batches: 1       
   gradient_clip_val: 1.0
   gradient_clip_algorithm: norm
 train_dataloader:
   _target_: uni2ts.data.loader.DataLoader
-  batch_size: 128               ##########################################################################
-  batch_size_factor: 2.0        ##########################################################################
-  cycle: true                ##########################################################################
-  num_batches_per_epoch: 100 ##########################################################################
+  batch_size: 128               
+  batch_size_factor: 2.0        
+  cycle: true                
+  num_batches_per_epoch: 100 
   shuffle: true
   num_workers: 11
   collate_fn:
-    _target_: uni2ts.data.loader.PackCollate         ##########################################################################
+    _target_: uni2ts.data.loader.PackCollate         
     max_length: ${model.module_kwargs.max_seq_len}
     seq_fields: ${cls_getattr:${model._target_},seq_fields}
     pad_func_map: ${cls_getattr:${model._target_},pad_func_map}
   pin_memory: true
   drop_last: false           
-  fill_last: false           ##########################################################################
+  fill_last: false           
   worker_init_fn: null
   prefetch_factor: 2
   persistent_workers: true
 val_dataloader:
   _target_: uni2ts.data.loader.DataLoader
-  batch_size: 128                       ##########################################################################
-  batch_size_factor: 2.0               ##########################################################################
+  batch_size: 128                       
+  batch_size_factor: 2.0               
   cycle: false
   num_batches_per_epoch: null
   shuffle: false

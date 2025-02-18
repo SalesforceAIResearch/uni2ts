@@ -84,9 +84,10 @@ def vn1_competition_evaluation(df):
     assert ~df.isnull().any().any()
 
     # Load Objective
-    objective = pd.read_csv(
-        f"/home/zhangxiaobin/dmwyd/uni2ts/project/vn1_competition/data/phase_2_sales.csv"
-    ).set_index(["Client", "Warehouse", "Product"])
+    current_dir = Path(__file__).parent
+    project_dir = current_dir.parent
+    file_path = project_dir / "data/phase_2_sales.csv"
+    objective = pd.read_csv(file_path).set_index(["Client", "Warehouse", "Product"])
     objective.columns = pd.to_datetime(objective.columns)
     assert (df.index == objective.index).all()
     assert (df.columns == objective.columns).all()
