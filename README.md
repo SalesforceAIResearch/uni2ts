@@ -162,14 +162,14 @@ Firstly, let's see how to use Uni2TS to fine-tune a pre-trained model on your cu
 Uni2TS uses the [Hugging Face datasets library](https://github.com/huggingface/datasets) to handle data loading, and we first need to convert your dataset into the Uni2TS format. 
 If your dataset is a simple pandas DataFrame, we can easily process your dataset with the following script.
 We'll use the ETTh1 dataset from the popular [Long Sequence Forecasting benchmark](https://github.com/thuml/Time-Series-Library) for this example.
-For more complex use cases, see [this notebook](example/prepare_data.ipynb) for more in-depth examples on how to use your custom dataset with Uni2TS.
+For more complex use cases, see [this notebook](example/prepare_data.ipynb) for more in-depth examples on how to use your custom dataset with Uni2TS. For formal LSF finetuning experiments based on original configurations, see [this folder](./project/moirai-1) for shell scripts and more detailed examples.
 
 1. To begin the process, add the path to the directory where you want to save the processed dataset into the ```.env``` file.
 ```shell
 echo "CUSTOM_DATA_PATH=PATH_TO_SAVE" >> .env
 ```
 
-2. Run the following script to process the dataset into the required format. For the ```dataset_type``` option, we support `wide`, `long` and `wide_multivariate`.
+2. Run the following script to process the dataset into the required format. For the ```dataset_type``` option, we support `wide`, `long` and `wide_multivariate`. 
 ```shell
 python -m uni2ts.data.builder.simple ETTh1 dataset/ETT-small/ETTh1.csv --dataset_type wide
 ```
@@ -181,14 +181,33 @@ The validation set will be saved as DATASET_NAME_eval.
 python -m uni2ts.data.builder.simple ETTh1 dataset/ETT-small/ETTh1.csv --date_offset '2017-10-23 23:00:00'
 ```
 
-3. Finally, we can simply run the fine-tuning script with the appropriate [training](cli/conf/finetune/data/etth1.yaml) and [validation](cli/conf/finetune/val_data/etth1.yaml) data configuration files.
+In some cases, we may want to normalize the data using the mean and std computed from the training dataset. This can be achieved by setting the ```--normalize``` argument.
+
+```shell
+python -m uni2ts.data.builder.simple ETTh1 dataset/ETT-small/ETTh1.csv --date_offset '2017-10-23 23:00:00' --normalize
+```
+
+
+3. Finally, we can simply run the fine-tuning script with the appropriate [training](cli/conf/finetune/data/etth1.yaml) and [validation](cli/conf/finetune/val_data/etth1.yaml) data configuration files. Forecasting configurations such as patch size, context length and prediction length need to be specified by users.  Since ```dataset_type``` is ```wide```, ```data.mode``` is set to `S` for univariate setup.
 ```shell
 python -m cli.train \
   -cp conf/finetune \
-  run_name=example_run \ 
-  model=moirai_1.0_R_small \ 
-  data=etth1 \ 
-  val_data=etth1  
+  exp_name=example_lsf \
+  run_name=example_run \
+  model=moirai_1.0_R_small \
+  model.patch_size=32 \
+  model.context_length=1000 \
+  model.prediction_length=96 \
+  data=etth1 \
+  data.patch_size=32 \
+  data.context_length=1000 \
+  data.prediction_length=96 \
+  data.mode=S \
+  val_data=etth1 \
+  val_data.patch_size=32 \
+  val_data.context_length=1000 \
+  val_data.prediction_length=96 \
+  val_data.mode=S
 ```
 
 ### Evaluation

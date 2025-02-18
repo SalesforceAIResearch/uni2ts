@@ -1,5 +1,5 @@
 _target_: uni2ts.data.builder.simple.generate_finetune_builder
-dataset: ETTh1
+dataset: ETTh2
 train_length: 8640
 prediction_length: ???
 context_length: ???

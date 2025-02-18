@@ -26,11 +26,15 @@ from torch.utils.data import Dataset
 
 from uni2ts.common.env import env
 from uni2ts.common.typing import GenFunc
-from uni2ts.data.dataset import EvalDataset, SampleTimeSeriesType, TimeSeriesDataset
+from uni2ts.data.builder._base import DatasetBuilder
+from uni2ts.data.dataset import (
+    EvalDataset,
+    FinetuneDataset,
+    SampleTimeSeriesType,
+    TimeSeriesDataset,
+)
 from uni2ts.data.indexer import HuggingFaceDatasetIndexer
 from uni2ts.transform import Transformation
-
-from ._base import DatasetBuilder
 
 
 def _from_long_dataframe(
@@ -240,6 +244,110 @@ class SimpleDatasetBuilder(DatasetBuilder):
 
 
 @dataclass
+class SimpleFinetuneDatasetBuilder(DatasetBuilder):
+    dataset: str
+    windows: Optional[int]
+    distance: Optional[int]
+    prediction_length: Optional[int]
+    context_length: Optional[int]
+    patch_size: Optional[int]
+    mode: Optional[str] = "S"
+    storage_path: Path = env.CUSTOM_DATA_PATH
+    mean = None
+    std = None
+
+    """
+    Databuilder class for LSF fine-tuning, which is modified from SimpleEvalDatasetBuilder. 
+    'mean' and 'std' are accepted for data normalization.
+    """
+
+    def __post_init__(self):
+        self.storage_path = Path(self.storage_path)
+
+    def build_dataset(
+        self,
+        file: Path,
+        dataset_type: str,
+        offset: Optional[int] = None,
+        date_offset: Optional[pd.Timestamp] = None,
+        freq: str = "H",
+        normalize: Optional[bool] = False,
+    ):
+
+        assert offset is None or date_offset is None, (
+            "One or neither offset and date_offset must be specified, but not both. "
+            f"Got offset: {offset}, date_offset: {date_offset}"
+        )
+
+        df = pd.read_csv(file, index_col=0, parse_dates=True)
+
+        if normalize:  # Normalize data in LSF setup
+            end = (
+                offset
+                if offset is not None
+                else (
+                    len(df[df.index <= date_offset].index)
+                    if date_offset is not None
+                    else len(df.index)
+                )
+            )
+            df = self.scale(df, 0, end)
+
+        if dataset_type == "long":
+            _from_dataframe = _from_long_dataframe
+        elif dataset_type == "wide":
+            _from_dataframe = _from_wide_dataframe
+        elif dataset_type == "wide_multivariate":
+            _from_dataframe = _from_wide_dataframe_multivariate
+        else:
+            raise ValueError(
+                f"Unrecognized dataset_type, {dataset_type}."
+                " Valid options are 'long', 'wide', and 'wide_multivariate'."
+            )
+
+        example_gen_func, features = _from_dataframe(
+            df, freq=freq, offset=offset, date_offset=date_offset
+        )
+        hf_dataset = datasets.Dataset.from_generator(
+            example_gen_func, features=features
+        )
+        hf_dataset.info.dataset_name = self.dataset
+        hf_dataset.save_to_disk(
+            self.storage_path / "lsf" / f"{dataset_type}" / self.dataset
+        )
+
+    def load_dataset(
+        self, transform_map: dict[str, Callable[..., Transformation]]
+    ) -> Dataset:
+
+        if self.mode == "S":
+            dataset_type = "wide"
+        elif self.mode == "M":
+            dataset_type = "wide_multivariate"
+
+        return FinetuneDataset(
+            self.windows,
+            HuggingFaceDatasetIndexer(
+                datasets.load_from_disk(
+                    str(self.storage_path / "lsf" / f"{dataset_type}" / self.dataset),
+                )
+            ),
+            transform=transform_map[self.dataset](
+                distance=self.distance,
+                prediction_length=self.prediction_length,
+                context_length=self.context_length,
+                patch_size=self.patch_size,
+            ),
+        )
+
+    def scale(self, data, start, end):
+        train = data[start:end]
+        self.mean = train.mean(axis=0)
+        self.std = train.std(axis=0)
+        return (data - self.mean) / (self.std + 1e-10)
+
+
+@dataclass
 class SimpleEvalDatasetBuilder(DatasetBuilder):
     dataset: str
     offset: Optional[int]
@@ -248,13 +356,24 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
     prediction_length: Optional[int]
     context_length: Optional[int]
     patch_size: Optional[int]
+    mode: Optional[str] = "S"
     storage_path: Path = env.CUSTOM_DATA_PATH
 
     def __post_init__(self):
         self.storage_path = Path(self.storage_path)
 
-    def build_dataset(self, file: Path, dataset_type: str, freq: str = "H"):
+    def build_dataset(
+        self,
+        file: Path,
+        dataset_type: str,
+        freq: str = "H",
+        mean: pd.Series = None,
+        std: pd.Series = None,
+    ):
         df = pd.read_csv(file, index_col=0, parse_dates=True)
+
+        if mean is not None and std is not None:  # Normalize data in LSF setup
+            df = (df - mean) / (std + 1e-10)
 
         if dataset_type == "long":
             _from_dataframe = _from_long_dataframe
@@ -273,16 +392,23 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
             example_gen_func, features=features
         )
         hf_dataset.info.dataset_name = self.dataset
-        hf_dataset.save_to_disk(self.storage_path / self.dataset)
+        hf_dataset.save_to_disk(
+            self.storage_path / "lsf" / f"{dataset_type}" / self.dataset
+        )
 
     def load_dataset(
         self, transform_map: dict[str, Callable[..., Transformation]]
     ) -> Dataset:
+        if self.mode == "S":
+            dataset_type = "wide"
+        elif self.mode == "M":
+            dataset_type = "wide_multivariate"
+
         return EvalDataset(
             self.windows,
             HuggingFaceDatasetIndexer(
                 datasets.load_from_disk(
-                    str(self.storage_path / self.dataset),
+                    str(self.storage_path / "lsf" / f"{dataset_type}" / self.dataset),
                 )
             ),
             transform=transform_map[self.dataset](
@@ -293,6 +419,68 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
                 patch_size=self.patch_size,
             ),
         )
+
+
+def generate_finetune_builder(
+    dataset: str,
+    train_length: int,
+    prediction_length: int,
+    context_length: int,
+    patch_size: int,
+    mode: str,
+    storage_path: Path = env.CUSTOM_DATA_PATH,
+    distance=1,
+) -> SimpleFinetuneDatasetBuilder:
+    """
+    By default, 'distance' is set to 1 for sliding window. A larger value can be used to reduce computational cost.
+    """
+
+    windows = (train_length - context_length - prediction_length) // distance + 1
+    return SimpleFinetuneDatasetBuilder(
+        dataset=dataset,
+        windows=windows,
+        distance=distance,
+        prediction_length=prediction_length,
+        context_length=context_length,
+        patch_size=patch_size,
+        mode=mode,
+        storage_path=storage_path,
+    )
+
+
+def generate_eval_builder(
+    dataset: str,
+    offset: int,
+    eval_length: int,
+    prediction_length: int,
+    context_length: int,
+    patch_size: int,
+    mode: str,
+    storage_path: Path = env.CUSTOM_DATA_PATH,
+    distance=None,
+) -> SimpleEvalDatasetBuilder:
+    """
+    By default, 'distance' is set to prediction length for rolling evaluation.
+    Offer specific 'distance' to decrease the number of validation samples and to reduce computational cost.
+    """
+
+    if distance is not None:
+        windows = (eval_length - prediction_length) // distance + 1
+    else:
+        distance = prediction_length
+        windows = eval_length // prediction_length
+
+    return SimpleEvalDatasetBuilder(
+        dataset=dataset,
+        offset=offset,
+        windows=windows,
+        distance=distance,
+        prediction_length=prediction_length,
+        context_length=context_length,
+        patch_size=patch_size,
+        mode=mode,
+        storage_path=storage_path,
+    )
 
 
 def generate_eval_builders(
@@ -345,17 +533,36 @@ if __name__ == "__main__":
         default="H",  # Set the default value
         help="The user specified frequency",
     )
+    parser.add_argument(
+        "--normalize",
+        action="store_true",
+        help="Normalize train and eval data with train statistics",
+    )
 
     args = parser.parse_args()
 
-    SimpleDatasetBuilder(dataset=args.dataset_name).build_dataset(
+    # Create training dataset
+    # If offset/date_offset is not provided, the whole data will be used for training.
+    # Otherwise, only the part before offset is used for training.
+    train_dataset_builder = SimpleFinetuneDatasetBuilder(
+        dataset=args.dataset_name,
+        windows=None,
+        distance=None,
+        prediction_length=None,
+        context_length=None,
+        patch_size=None,
+    )
+    train_dataset_builder.build_dataset(
         file=Path(args.file_path),
         dataset_type=args.dataset_type,
         offset=args.offset,
         date_offset=pd.Timestamp(args.date_offset) if args.date_offset else None,
         freq=args.freq,
+        normalize=args.normalize,
     )
 
+    # Create a validation dataset if offset/date_offset is provided.
+    # Eval dataset include the whole data.
     if args.offset is not None or args.date_offset is not None:
         SimpleEvalDatasetBuilder(
             f"{args.dataset_name}_eval",
@@ -366,5 +573,9 @@ if __name__ == "__main__":
             context_length=None,
             patch_size=None,
         ).build_dataset(
-            file=Path(args.file_path), dataset_type=args.dataset_type, freq=args.freq
+            file=Path(args.file_path),
+            dataset_type=args.dataset_type,
+            freq=args.freq,
+            mean=train_dataset_builder.mean,
+            std=train_dataset_builder.std,
         )

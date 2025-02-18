@@ -14,8 +14,8 @@
 #  limitations under the License.
 
 from ._base import Chain, Identity, Transformation
-from .crop import EvalCrop, PatchCrop
-from .feature import AddObservedMask, AddTimeIndex, AddVariateIndex
+from .crop import EvalCrop, FinetunePatchCrop, PatchCrop
+from .feature import AddObservedMask, AddSampleIndex, AddTimeIndex, AddVariateIndex
 from .field import LambdaSetFieldIfNotPresent, RemoveFields, SelectFields, SetValue
 from .imputation import DummyValueImputation, ImputeTimeSeries, LastValueImputation
 from .pad import EvalPad, Pad, PadFreq
@@ -39,6 +39,7 @@ from .task import EvalMaskedPrediction, ExtendMask, MaskedPrediction
 
 __all__ = [
     "AddObservedMask",
+    "AddSampleIndex",
     "AddTimeIndex",
     "AddVariateIndex",
     "Chain",
@@ -71,4 +72,5 @@ __all__ = [
     "SetValue",
     "Transformation",
     "Transpose",
+    "FinetunePatchCrop",
 ]
