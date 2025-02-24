@@ -1,0 +1,84 @@
+hydra:
+  run:
+    dir: outputs/finetune/${hydra:runtime.choices.model}/${hydra:runtime.choices.data}/${run_name}
+defaults:
+  - model: ../moirai_1.1_R_base
+  - data: ../VN1
+  - val_data: ../VN1_val
+  - _self_
+run_name: ???
+seed: 0
+tf32: true
+compile: false  # set to mode: default, reduce-overhead, max-autotune
+ckpt_path: null
+trainer:
+  _target_: lightning.Trainer
+  accelerator: auto
+  strategy: auto
+  devices: [0,1,2,3]            
+  num_nodes: 1
+  precision: 32
+  logger:
+      _target_: lightning.pytorch.loggers.TensorBoardLogger
+      save_dir: ${hydra:runtime.output_dir}
+      name: logs
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.LearningRateMonitor
+      logging_interval: epoch
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: ${hydra:runtime.output_dir}/checkpoints
+      monitor: val/PackedNLLLoss
+      save_weights_only: true
+      mode: min
+      save_top_k: 1
+      every_n_epochs: 1
+    - _target_: lightning.pytorch.callbacks.EarlyStopping 
+      monitor: val/PackedNLLLoss
+      min_delta: 0.0
+      patience: 5
+      mode: min
+      strict: false
+      verbose: true
+  max_epochs: 100
+  enable_progress_bar: true
+  accumulate_grad_batches: 1       
+  gradient_clip_val: 1.0
+  gradient_clip_algorithm: norm
+train_dataloader:
+  _target_: uni2ts.data.loader.DataLoader
+  batch_size: 128               
+  batch_size_factor: 2.0        
+  cycle: true                
+  num_batches_per_epoch: 100 
+  shuffle: true
+  num_workers: 11
+  collate_fn:
+    _target_: uni2ts.data.loader.PackCollate         
+    max_length: ${model.module_kwargs.max_seq_len}
+    seq_fields: ${cls_getattr:${model._target_},seq_fields}
+    pad_func_map: ${cls_getattr:${model._target_},pad_func_map}
+  pin_memory: true
+  drop_last: false           
+  fill_last: false           
+  worker_init_fn: null
+  prefetch_factor: 2
+  persistent_workers: true
+val_dataloader:
+  _target_: uni2ts.data.loader.DataLoader
+  batch_size: 128                       
+  batch_size_factor: 2.0               
+  cycle: false
+  num_batches_per_epoch: null
+  shuffle: false
+  num_workers: 11
+  collate_fn:
+    _target_: uni2ts.data.loader.PackCollate
+    max_length: ${model.module_kwargs.max_seq_len}
+    seq_fields: ${cls_getattr:${model._target_},seq_fields}
+    pad_func_map: ${cls_getattr:${model._target_},pad_func_map}
+  pin_memory: false
+  drop_last: false
+  fill_last: true
+  worker_init_fn: null
+  prefetch_factor: 2
+  persistent_workers: true
