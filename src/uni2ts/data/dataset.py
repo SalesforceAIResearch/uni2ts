@@ -209,3 +209,31 @@ class EvalDataset(TimeSeriesDataset):
         item = self.indexer[idx]
         item["window"] = window
         return item
+
+
+class FinetuneDataset(TimeSeriesDataset):
+    """
+    This class is identical to EvalDataset. It is created solely to avoid confusion due to naming.
+    """
+
+    def __init__(
+        self,
+        windows: int,
+        indexer: Indexer[dict[str, Any]],
+        transform: Transformation,
+    ):
+        """
+        :param windows: number of windows to perform evaluation on
+        """
+        super().__init__(
+            indexer,
+            transform,
+            SampleTimeSeriesType.NONE,
+            dataset_weight=windows,
+        )
+
+    def _get_data(self, idx: int) -> dict[str, Data]:
+        window, idx = divmod(idx, self.num_ts)
+        item = self.indexer[idx]
+        item["window"] = window
+        return item

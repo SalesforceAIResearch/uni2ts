@@ -125,3 +125,35 @@ class AddObservedMask(CollectFuncMixin, Transformation):
     def _generate_observed_mask(data_entry: dict[str, Any], field: str) -> np.ndarray:
         arr = data_entry[field]
         return ~np.isnan(arr)
+
+
+@dataclass
+class AddSampleIndex(CollectFuncMixin, CheckArrNDimMixin, Transformation):
+    """
+    Add sample_id when sequence packing is not used. Follow the implementation in MoiraiForecast.
+    """
+
+    fields: tuple[str, ...]
+    optional_fields: tuple[str, ...] = tuple()
+    sample_id_field: str = "sample_id"
+    expected_ndim: int = 2
+    collection_type: type = list
+
+    def __call__(self, data_entry: dict[str, Any]) -> dict[str, Any]:
+
+        data_entry[self.sample_id_field] = self.collect_func(
+            self._generate_sample_id,
+            data_entry,
+            self.fields,
+            optional_fields=self.optional_fields,
+        )
+        return data_entry
+
+    def _generate_sample_id(self, data_entry: dict[str, Any], field: str) -> np.ndarray:
+        arr = data_entry[field]
+        self.check_ndim(field, arr, self.expected_ndim)
+        var, time = arr.shape[:2]
+        # If not using sequence packing, then all patches in an entry are from the same sample.
+        field_seq_id = np.ones(time, dtype=int)
+        field_seq_id = repeat(field_seq_id, "time -> var time", var=var)
+        return field_seq_id
