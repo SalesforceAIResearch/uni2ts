@@ -15,7 +15,7 @@
 
 import math
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Generator, Sequence
 from typing import Any, Optional
 
 import lightning as L
@@ -41,22 +41,21 @@ from uni2ts.module.ts_embed import MultiInSizeLinear, MultiOutSizeLinear
 from uni2ts.optim import SchedulerType, get_scheduler
 from uni2ts.transform import (
     AddObservedMask,
+    AddSampleIndex,
     AddTimeIndex,
     AddVariateIndex,
-    DefaultPatchSizeConstraints,
     DummyValueImputation,
     EvalCrop,
     EvalMaskedPrediction,
     EvalPad,
     ExtendMask,
+    FinetunePatchCrop,
     FixedPatchSizeConstraints,
     FlatPackCollection,
     FlatPackFields,
     GetPatchSize,
     ImputeTimeSeries,
-    MaskedPrediction,
     PackFields,
-    PatchCrop,
     Patchify,
     SelectFields,
     SequencifyField,
@@ -64,6 +63,30 @@ from uni2ts.transform import (
 )
 
 from .module import MoiraiModule
+
+
+class SetTrainableParamsMixin:
+    """
+    A basic version of Mixin class for setting trainable parameters. Haven't applied it in the current model.
+    """
+
+    @staticmethod
+    def set_trainable_params(
+        finetune_pattern: str,
+        named_parameters: Generator[tuple[str, torch.nn.Parameter], None, None],
+    ):
+        if finetune_pattern == "full":
+            pass
+        elif finetune_pattern == "freeze_ffn":
+            for pn, p in named_parameters:
+                if "ffn" in pn:
+                    p.requires_grad = False
+        elif finetune_pattern == "head_only":
+            for pn, p in named_parameters:
+                if "param_proj" not in pn:
+                    p.requires_grad = False
+        else:
+            raise ValueError("Unsupported finetune pattern {}".format(finetune_pattern))
 
 
 class MoiraiFinetune(L.LightningModule):
@@ -102,16 +125,27 @@ class MoiraiFinetune(L.LightningModule):
         lr: float = 1e-3,
         weight_decay: float = 1e-2,
         log_on_step: bool = False,
+        context_length: Optional[int | list[int]] = None,
+        prediction_length: Optional[int | list[int]] = None,
+        patch_size: Optional[int] = None,
+        finetune_pattern: str | list[str] = "full",
     ):
         assert (module is not None) or (
             module_kwargs is not None
         ), "if module is not provided, module_kwargs is required"
-        assert (
-            num_warmup_steps <= num_training_steps
-        ), f"num_warmup_steps ({num_warmup_steps}) should be <= num_training_steps ({num_training_steps})."
+
+        if num_training_steps is not None:
+            assert (
+                num_warmup_steps <= num_training_steps
+            ), f"num_warmup_steps ({num_warmup_steps}) should be <= num_training_steps ({num_training_steps})."
         super().__init__()
         self.save_hyperparameters(ignore=["module"])
         self.module = MoiraiModule(**module_kwargs) if module is None else module
+
+        self.context_length = context_length
+        self.prediction_length = prediction_length
+        self.patch_size = patch_size
+        self.finetune_pattern = finetune_pattern
 
     def forward(
         self,
@@ -250,6 +284,21 @@ class MoiraiFinetune(L.LightningModule):
         decay = set()
         no_decay = set()
 
+        if self.finetune_pattern == "full":
+            pass
+        elif self.finetune_pattern == "freeze_ffn":
+            for pn, p in self.named_parameters():
+                if "ffn" in pn:
+                    p.requires_grad = False
+        elif self.finetune_pattern == "head_only":
+            for pn, p in self.named_parameters():
+                if "param_proj" not in pn:
+                    p.requires_grad = False
+        else:
+            raise ValueError(
+                "Unsupported finetune pattern {}".format(self.finetune_pattern)
+            )
+
         whitelist_params = (
             LearnedProjection,
             MultiInSizeLinear,
@@ -279,6 +328,7 @@ class MoiraiFinetune(L.LightningModule):
 
         # validate that we considered every parameter
         param_dict = {pn: p for pn, p in self.named_parameters() if p.requires_grad}
+
         inter_params = decay & no_decay
         union_params = decay | no_decay
         assert (
@@ -312,7 +362,7 @@ class MoiraiFinetune(L.LightningModule):
             eps=1e-6,
         )
         scheduler = get_scheduler(
-            SchedulerType.COSINE_WITH_RESTARTS,
+            SchedulerType.CONSTANT,  # Use constant lr scheduler
             optimizer,
             num_warmup_steps=self.hparams.num_warmup_steps,
             num_training_steps=self.hparams.num_training_steps,
@@ -330,20 +380,24 @@ class MoiraiFinetune(L.LightningModule):
     def train_transform_map(
         self,
     ) -> dict[str | type, Callable[..., Transformation]]:
-        def default_train_transform():
+        def default_train_transform(
+            distance: int,
+            prediction_length: int,
+            context_length: int,
+            patch_size: int,
+        ):
             return (
                 GetPatchSize(
                     min_time_patches=self.hparams.min_patches,
                     target_field="target",
                     patch_sizes=self.module.patch_sizes,
-                    patch_size_constraints=DefaultPatchSizeConstraints(),
+                    patch_size_constraints=FixedPatchSizeConstraints(patch_size),
                     offset=True,
                 )
-                + PatchCrop(
-                    min_time_patches=self.hparams.min_patches,
-                    max_patches=self.module.max_seq_len,
-                    will_flatten=True,
-                    offset=True,
+                + FinetunePatchCrop(
+                    distance,
+                    prediction_length,
+                    context_length,
                     fields=("target",),
                     optional_fields=("past_feat_dynamic_real",),
                 )
@@ -354,6 +408,12 @@ class MoiraiFinetune(L.LightningModule):
                 + PackFields(
                     output_field="past_feat_dynamic_real",
                     fields=tuple(),
+                    optional_fields=("past_feat_dynamic_real",),
+                )
+                + EvalPad(
+                    prediction_pad=-prediction_length % patch_size,
+                    context_pad=-context_length % patch_size,
+                    fields=("target",),
                     optional_fields=("past_feat_dynamic_real",),
                 )
                 + AddObservedMask(
@@ -378,7 +438,7 @@ class MoiraiFinetune(L.LightningModule):
                     variate_id_field="variate_id",
                     expected_ndim=3,
                     max_dim=self.hparams.max_dim,
-                    randomize=True,
+                    randomize=False,  # Disable random variate id
                     collection_type=dict,
                 )
                 + AddTimeIndex(
@@ -388,11 +448,22 @@ class MoiraiFinetune(L.LightningModule):
                     expected_ndim=3,
                     collection_type=dict,
                 )
-                + MaskedPrediction(
-                    min_mask_ratio=self.hparams.min_mask_ratio,
-                    max_mask_ratio=self.hparams.max_mask_ratio,
+                + AddSampleIndex(  # Since sequence packing is not used, need to add sample id in transformation
+                    fields=("target",),
+                    optional_fields=("past_feat_dynamic_real",),
+                    sample_id_field="sample_id",
+                    expected_ndim=3,
+                    collection_type=dict,
+                )
+                + EvalMaskedPrediction(
+                    mask_length=math.ceil(prediction_length / patch_size),
                     target_field="target",
-                    truncate_fields=("variate_id", "time_id", "observed_mask"),
+                    truncate_fields=(
+                        "variate_id",
+                        "time_id",
+                        "observed_mask",
+                        "sample_id",
+                    ),
                     optional_truncate_fields=("past_feat_dynamic_real",),
                     prediction_mask_field="prediction_mask",
                     expected_ndim=3,
@@ -409,6 +480,10 @@ class MoiraiFinetune(L.LightningModule):
                 )
                 + FlatPackCollection(
                     field="time_id",
+                    feat=False,
+                )
+                + FlatPackCollection(
+                    field="sample_id",
                     feat=False,
                 )
                 + FlatPackCollection(
@@ -495,7 +570,7 @@ class MoiraiFinetune(L.LightningModule):
                     variate_id_field="variate_id",
                     expected_ndim=3,
                     max_dim=self.hparams.max_dim,
-                    randomize=True,
+                    randomize=False,
                     collection_type=dict,
                 )
                 + AddTimeIndex(
@@ -505,10 +580,22 @@ class MoiraiFinetune(L.LightningModule):
                     expected_ndim=3,
                     collection_type=dict,
                 )
+                + AddSampleIndex(
+                    fields=("target",),
+                    optional_fields=("past_feat_dynamic_real",),
+                    sample_id_field="sample_id",
+                    expected_ndim=3,
+                    collection_type=dict,
+                )
                 + EvalMaskedPrediction(
                     mask_length=math.ceil(prediction_length / patch_size),
                     target_field="target",
-                    truncate_fields=("variate_id", "time_id", "observed_mask"),
+                    truncate_fields=(
+                        "variate_id",
+                        "time_id",
+                        "observed_mask",
+                        "sample_id",
+                    ),
                     optional_truncate_fields=("past_feat_dynamic_real",),
                     prediction_mask_field="prediction_mask",
                     expected_ndim=3,
@@ -525,6 +612,10 @@ class MoiraiFinetune(L.LightningModule):
                 )
                 + FlatPackCollection(
                     field="time_id",
+                    feat=False,
+                )
+                + FlatPackCollection(
+                    field="sample_id",
                     feat=False,
                 )
                 + FlatPackCollection(

@@ -395,6 +395,16 @@ class DataLoader:
     - cycle
     """
 
+    pad_func_map: dict[str, Callable[[Sequence[int], np.dtype], np.ndarray]] = {
+        "target": np.zeros,
+        "observed_mask": np.zeros,
+        "time_id": np.zeros,
+        "variate_id": np.zeros,
+        "prediction_mask": np.zeros,
+        "patch_size": np.zeros,
+        "sample_id": np.zeros,
+    }
+
     def __init__(
         self,
         dataset: Dataset,
@@ -459,7 +469,11 @@ class DataLoader:
                 batch_size=self.batch_size,
                 drop_last=self.drop_last,
                 fill_last=self.fill_last,
-                pad_func_map=self.collate_fn.pad_func_map,
+                pad_func_map=(  # `collate_fn` is used solely for pretraining and is None during fine-tuning.
+                    self.pad_func_map
+                    if self.collate_fn is None
+                    else self.collate_fn.pad_func_map
+                ),
             )
         return itertools.islice(self.iterator, self.num_batches_per_epoch)
 

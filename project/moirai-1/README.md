@@ -85,3 +85,34 @@ To run the probabilistic forecasting and long sequence forecasting, ensrue to ad
 ./project/moirai-1/eval/lsf_base.sh
 ./project/moirai-1/eval/lsf_large.sh
 ```
+
+## Finetuning
+
+Beyond zero-shot evaluation of pretrained models, the Moirai series can also be finetuned on downstream datasets to further enhance its performance. The following sections illustrate how to finetune a Moirai model on a single LSF dataset.
+
+0. Set the environment variables for dataset paths if you haven't done so:
+```shell
+echo "CUSTOM_DATA_PATH=PATH_TO_SAVE" >> .env
+echo "LSF_PATH=PATH_TO_TSLIB/dataset" >> .env
+```
+
+
+1. Create the LSF finetuning datasets:
+
+```shell
+bash ./project/moirai-1/finetune_lsf/build_lsf_ft_datasets.sh
+```
+
+2.  Finetune the model on an LSF dataset (e.g. ETTm1) with four different prediction lengths:
+
+```shell
+bash ./project/moirai-1/finetune_lsf/train_small/ettm1.sh
+```
+
+3. After training is complete, add the relative checkpoint paths (e.g. './outputs/finetune/lsf_S/moirai_1.0_R_small/full/ettm1/cl4000_pl96/checkpoints/{ckpt_name}.ckpt')  to the corresponding evaluation shell scripts and execute them for evaluation:
+
+```shell
+bash ./project/moirai-1/finetune_lsf/eval_small/ettm1.sh
+```
+
+More details can be found in the [finetune_lsf](./finetune_lsf) folder.
