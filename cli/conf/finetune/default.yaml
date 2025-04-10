@@ -19,9 +19,8 @@ trainer:
   num_nodes: 1
   precision: 32
   logger:
-      _target_: lightning.pytorch.loggers.TensorBoardLogger
+      _target_: lightning.pytorch.loggers.WandbLogger
       save_dir: ${hydra:runtime.output_dir}
-      name: logs
   callbacks:
     - _target_: lightning.pytorch.callbacks.LearningRateMonitor
       logging_interval: epoch
