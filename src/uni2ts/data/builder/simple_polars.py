@@ -31,15 +31,16 @@ def _from_polars(
     NON_NULL_COUNTER = "non_null_columns"
 
     def generator_function(shards: List[str]) -> Generator[dict[str, Any], None, None]:
+        # Do not move Polars expressions below outside of the generator func as those are not serializable with dill
         start_exprs = pl.col(timestemp_column).list.first().alias(START_COLUMN)
 
         non_null_columns = [pl.when(pl.col(col_name).is_not_null()).then(pl.col(col_name)) for col_name in columns]
         concatenation_exprs = pl.concat_list(non_null_columns).alias(TIMESERIES_COLUMN)
 
         non_null_flags = [pl.col(col_name).is_not_null().cast(pl.UInt8) for col_name in columns]
-        not_null_column_count_expr = pl.fold(acc=pl.lit(0), function=lambda acc, x: acc + x, exprs=non_null_flags).alias(
-            NON_NULL_COUNTER
-        )
+        not_null_column_count_expr = pl.fold(
+            acc=pl.lit(0), function=lambda acc, x: acc + x, exprs=non_null_flags
+        ).alias(NON_NULL_COUNTER)
 
         for shard in shards:
             lf = pl.scan_parquet(shard)
@@ -148,6 +149,7 @@ class SimplePolarsEvalDatasetBuilder(DatasetBuilder):
             ),
         )
 
+
 def generate_eval_builders(
     dataset: str,
     offset: int,
@@ -170,8 +172,8 @@ def generate_eval_builders(
         )
         for pred, ctx, psz in product(prediction_lengths, context_lengths, patch_sizes)
     ]
-    
-    
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("dataset_name", type=str)
@@ -186,14 +188,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    
+
     dataset_builder = SimplePolarsDatasetBuilder(
-        dataset=args.dataset_name,
-        timestemp_column=args.timestemp_column,
-        columns = args.columns
+        dataset=args.dataset_name, timestemp_column=args.timestemp_column, columns=args.columns
     )
 
-    dataset_builder.build_dataset(
-        folder_path=Path(args.folder_path),
-        freq=args.freq
-    )
+    dataset_builder.build_dataset(folder_path=Path(args.folder_path), freq=args.freq)
