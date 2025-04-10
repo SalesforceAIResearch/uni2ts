@@ -2,7 +2,7 @@ import argparse
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
-from typing import Any, Callable, Generator, Optional, List
+from typing import Any, Callable, Generator, Optional, List, Union
 
 import polars as pl
 
@@ -22,13 +22,17 @@ from ._base import DatasetBuilder
 
 
 def _from_polars(
-    timestemp_column: str,
-    columns: List[str],
-    freq: str = "H",
+    timestemp_column: str, columns: List[str], offset: float = 0.0, end: float = 1.0, freq: str = "H"
 ) -> tuple[GenFunc, Features]:
     START_COLUMN = "start"
     TIMESERIES_COLUMN = "time_series"
     NON_NULL_COUNTER = "non_null_columns"
+
+    if offset > 1.0 or offset < 0.0:
+        raise ValueError(f"Offset should be a positive integer or a float between 0 and 1.")
+
+    if end > 1.0 or end < 0.0:
+        raise ValueError(f"End should be a positive integer or a float between 0 and 1.")
 
     def generator_function(shards: List[str]) -> Generator[dict[str, Any], None, None]:
         # Do not move Polars expressions below outside of the generator func as those are not serializable with dill
@@ -44,6 +48,12 @@ def _from_polars(
 
         for shard in shards:
             lf = pl.scan_parquet(shard)
+
+            rows = lf.select(pl.len()).collect().item()
+            offset_int = int(rows * offset)
+            length = int(rows * end) - offset_int
+
+            lf = lf.slice(offset_int, length)
             lf = lf.with_columns(start_exprs, concatenation_exprs, not_null_column_count_expr).collect()
 
             for row in lf.iter_rows(named=True):
@@ -75,9 +85,13 @@ class SimplePolarsDatasetBuilder(DatasetBuilder):
     def __post_init__(self):
         self.storage_path = Path(self.storage_path)
 
-    def build_dataset(self, folder_path: Path, freq: str = "H", num_workers=None):
-        generator_func, features = _from_polars(self.timestemp_column, self.columns, freq)
-        polars_files = [path_object for path_object in folder_path.iterdir() if path_object.is_file()]
+    def build_dataset(self, folder_path: Path, offset: float, end: float, freq: str, num_workers=None):
+        generator_func, features = _from_polars(self.timestemp_column, self.columns, offset, end, freq)
+        polars_files = [
+            path_object
+            for path_object in folder_path.iterdir()
+            if path_object.is_file() and path_object.suffix == ".parquet"
+        ]
 
         hf_dataset = datasets.Dataset.from_generator(
             generator_func,
@@ -103,10 +117,10 @@ class SimplePolarsDatasetBuilder(DatasetBuilder):
 
 
 @dataclass
-class SimplePolarsEvalDatasetBuilder(DatasetBuilder):
+class SimpleEvalDatasetBuilder(DatasetBuilder):
     dataset: str
     timestemp_column: str
-    columns: List[str]
+    columns: list[str]
     offset: Optional[int]
     windows: Optional[int]
     distance: Optional[int]
@@ -118,9 +132,13 @@ class SimplePolarsEvalDatasetBuilder(DatasetBuilder):
     def __post_init__(self):
         self.storage_path = Path(self.storage_path)
 
-    def build_dataset(self, folder_path: Path, freq: str = "H", num_workers=None):
-        generator_func, features = _from_polars(self.timestemp_column, self.columns, freq)
-        polars_files = [path_object for path_object in folder_path.iterdir() if path_object.is_file()]
+    def build_dataset(self, folder_path: Path, offset: float, end: float, freq: str, num_workers=None):
+        generator_func, features = _from_polars(self.timestemp_column, self.columns, offset, end, freq)
+        polars_files = [
+            path_object
+            for path_object in folder_path.iterdir()
+            if path_object.is_file() and path_object.suffix == ".parquet"
+        ]
 
         hf_dataset = datasets.Dataset.from_generator(
             generator_func,
@@ -150,28 +168,30 @@ class SimplePolarsEvalDatasetBuilder(DatasetBuilder):
         )
 
 
-def generate_eval_builders(
-    dataset: str,
-    offset: int,
-    eval_length: int,
-    prediction_lengths: list[int],
-    context_lengths: list[int],
-    patch_sizes: list[int],
-    storage_path: Path = env.CUSTOM_DATA_PATH,
-) -> list[SimplePolarsEvalDatasetBuilder]:
-    return [
-        SimplePolarsEvalDatasetBuilder(
-            dataset=dataset,
-            offset=offset,
-            windows=eval_length // pred,
-            distance=pred,
-            prediction_length=pred,
-            context_length=ctx,
-            patch_size=psz,
-            storage_path=storage_path,
-        )
-        for pred, ctx, psz in product(prediction_lengths, context_lengths, patch_sizes)
-    ]
+def build_datasets(args):
+    dataset_builder = SimplePolarsDatasetBuilder(
+        dataset=args.dataset_name, timestemp_column=args.timestemp_column, columns=args.columns
+    )
+
+    dataset_builder.build_dataset(folder_path=Path(args.folder_path), offset=0.0, end=args.split_ratio, freq=args.freq)
+
+    if args.freq == 1.0:
+        return
+
+    eval_dataset_builder = SimpleEvalDatasetBuilder(
+        dataset=f"{args.dataset_name}_eval",
+        timestemp_column=args.timestemp_column,
+        columns=args.columns,
+        offset=None,
+        windows=None,
+        distance=None,
+        prediction_length=None,
+        context_length=None,
+        patch_size=None,
+    )
+    eval_dataset_builder.build_dataset(
+        folder_path=Path(args.folder_path), offset=args.split_ratio, end=1.0, freq=args.freq
+    )
 
 
 if __name__ == "__main__":
@@ -180,6 +200,7 @@ if __name__ == "__main__":
     parser.add_argument("folder_path", type=str)
     parser.add_argument("--timestemp_column", type=str)
     parser.add_argument("--columns", type=str, nargs="+")
+    parser.add_argument("--split_ratio", type=float, default=0.8)
     # Define the `freq` argument with a default value. Use this value as 'freq' if 'freq' is None.
     parser.add_argument(
         "--freq",
@@ -188,9 +209,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-
-    dataset_builder = SimplePolarsDatasetBuilder(
-        dataset=args.dataset_name, timestemp_column=args.timestemp_column, columns=args.columns
-    )
-
-    dataset_builder.build_dataset(folder_path=Path(args.folder_path), freq=args.freq)
+    build_datasets(args)
