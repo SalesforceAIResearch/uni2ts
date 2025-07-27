@@ -54,8 +54,20 @@ def encode_distr_output(
     return _encode(distr_output)
 
 
-def decode_distr_output(config: dict[str, str | float | int]) -> DistributionOutput:
-    """Deserialization function for DistributionOutput"""
+SAFE_MODULE_PREFIXES = [
+    "uni2ts.distribution.",
+]
+
+
+def decode_distr_output(config: dict) -> DistributionOutput:
+    def safe_target_check(obj):
+        if isinstance(obj, dict) and "_target_" in obj:
+            target = obj["_target_"]
+            if not any(target.startswith(prefix) for prefix in SAFE_MODULE_PREFIXES):
+                raise ValueError(f"Unsafe target in config: {target}")
+        return obj
+
+    safe_target_check(config)
     return instantiate(config, _convert_="all")
 
 
