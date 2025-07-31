@@ -73,7 +73,7 @@ class ERA5DatasetBuilder(LOTSADatasetBuilder):
         )
 
         def gen_func(
-            jobs: list[tuple[int, int]]
+            jobs: list[tuple[int, int]],
         ) -> Generator[dict[str, Any], None, None]:
             for x, y in jobs:
                 yield dict(
