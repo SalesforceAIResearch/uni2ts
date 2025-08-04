@@ -13,6 +13,22 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+"""
+Packed loss functions for time series forecasting.
+
+This submodule provides loss functions that support packed sequences, which are
+variable-length time series batched together efficiently. These loss functions
+handle masking for predictions and observations, and support sample and variate
+identifiers for proper aggregation across batches.
+
+The loss functions are organized into several categories:
+- Base classes: Abstract base classes for different types of losses
+- Distribution losses: For probabilistic forecasts (distributions)
+- Normalized losses: With various normalization strategies
+- Percentage error losses: For relative error metrics
+- Point losses: For deterministic forecasts
+"""
+
 from ._base import PackedDistributionLoss, PackedLoss, PackedPointLoss
 from .distribution import PackedNLLLoss
 from .normalized import (

@@ -23,11 +23,17 @@ from torch.distributions import Distribution
 
 from uni2ts.common.torch_util import safe_div
 
+# Base classes for packed loss functions
+
 
 class PackedLoss(abc.ABC):
     """
     Abstract base class for loss functions supporting packed inputs.
     Subclasses should implement the _loss_func method which computes the loss function per token.
+    
+    This is the foundation for all loss functions in the packed module. It handles the common
+    operations of applying masks, dealing with sample and variate identifiers, and reducing
+    the loss appropriately across the batch.
     """
 
     def __call__(
@@ -40,13 +46,29 @@ class PackedLoss(abc.ABC):
         variate_id: Optional[Int[torch.Tensor, "*batch seq_len"]] = None,
     ) -> Float[torch.Tensor, ""]:
         """
-        :param pred: predictions
-        :param target: target labels
-        :param prediction_mask: 1 for predictions, 0 for non-predictions
-        :param observed_mask: 1 for observed values, 0 for non-observed values
-        :param sample_id: integer array representing the sample id
-        :param variate_id: integer array representing the variate id
-        :return: loss
+        Computes the loss between predictions and targets.
+        
+        Args:
+            pred: Predictions from the model. The type depends on the specific loss function.
+                 For point forecasts, this is a tensor. For distribution forecasts, this is a
+                 Distribution object.
+            target: Target values (ground truth) with shape [*batch, seq_len, #dim].
+            prediction_mask: Binary mask indicating which positions contain predictions (1) vs.
+                            non-predictions (0). Shape: [*batch, seq_len].
+            observed_mask: Binary mask indicating which values in the target are observed (1) vs.
+                          missing (0). Shape: [*batch, seq_len, #dim]. If None, all values are
+                          assumed to be observed.
+            sample_id: Integer tensor identifying which sample each position belongs to.
+                      Shape: [*batch, seq_len]. Used for proper aggregation of losses across
+                      variable-length sequences. If None, all positions are assumed to be from
+                      the same sample.
+            variate_id: Integer tensor identifying which variate (time series) each position
+                       belongs to. Shape: [*batch, seq_len]. Used for proper aggregation of
+                       losses across multiple time series. If None, all positions are assumed
+                       to be from the same variate.
+                       
+        Returns:
+            Scalar loss value.
         """
         if observed_mask is None:
             observed_mask = torch.ones_like(target, dtype=torch.bool)
@@ -81,6 +103,24 @@ class PackedLoss(abc.ABC):
         sample_id: Optional[Int[torch.Tensor, "*batch seq_len"]],
         variate_id: Optional[Int[torch.Tensor, "*batch seq_len"]],
     ) -> Float[torch.Tensor, ""]:
+        """
+        Reduces the per-token loss to a scalar value, accounting for masks and identifiers.
+        
+        This method handles the proper aggregation of losses across variable-length sequences
+        and multiple time series. It creates an ID mask to identify positions belonging to the
+        same sample and variate, counts the number of observations per sample/variate, and
+        normalizes the loss accordingly.
+        
+        Args:
+            loss: Per-token loss with shape [*batch, seq_len, #dim].
+            prediction_mask: Binary mask for predictions.
+            observed_mask: Binary mask for observed values.
+            sample_id: Sample identifiers.
+            variate_id: Variate identifiers.
+            
+        Returns:
+            Scalar loss value.
+        """
         id_mask = torch.logical_and(
             torch.eq(sample_id.unsqueeze(-1), sample_id.unsqueeze(-2)),
             torch.eq(variate_id.unsqueeze(-1), variate_id.unsqueeze(-2)),
@@ -110,7 +150,13 @@ class PackedLoss(abc.ABC):
 
 
 class PackedPointLoss(PackedLoss):
-    """Abstract base class for loss functions on point forecasts."""
+    """
+    Abstract base class for loss functions on point forecasts.
+    
+    Point forecasts are deterministic predictions of future values (as opposed to
+    probabilistic forecasts which predict distributions). This class serves as the
+    base for loss functions like MAE, MSE, RMSE, etc.
+    """
 
     @abc.abstractmethod
     def _loss_func(
@@ -125,7 +171,13 @@ class PackedPointLoss(PackedLoss):
 
 
 class PackedDistributionLoss(PackedLoss):
-    """Abstract base class for loss functions on probabilistic (distribution) forecasts."""
+    """
+    Abstract base class for loss functions on probabilistic (distribution) forecasts.
+    
+    Distribution forecasts predict probability distributions over future values rather
+    than single point estimates. This class serves as the base for loss functions like
+    negative log-likelihood (NLL) that evaluate probabilistic forecasts.
+    """
 
     @abc.abstractmethod
     def _loss_func(

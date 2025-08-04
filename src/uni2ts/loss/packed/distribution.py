@@ -19,8 +19,22 @@ from torch.distributions import Distribution
 
 from ._base import PackedDistributionLoss
 
+# Distribution-based loss functions for probabilistic forecasting
+
 
 class PackedNLLLoss(PackedDistributionLoss):
+    """
+    Negative Log-Likelihood Loss for probabilistic forecasts.
+    
+    This loss computes the negative log-likelihood of the target values under the predicted
+    probability distribution. It is a proper scoring rule for evaluating probabilistic forecasts,
+    meaning it encourages the model to produce calibrated probability distributions.
+    
+    The loss is minimized when the predicted distribution assigns high probability to the
+    observed target values. It penalizes both incorrect central predictions and incorrect
+    uncertainty estimates.
+    """
+    
     def _loss_func(
         self,
         pred: Distribution,
@@ -30,4 +44,18 @@ class PackedNLLLoss(PackedDistributionLoss):
         sample_id: Int[torch.Tensor, "*batch seq_len"],
         variate_id: Int[torch.Tensor, "*batch seq_len"],
     ) -> Float[torch.Tensor, "*batch seq_len #dim"]:
+        """
+        Computes the negative log-likelihood loss.
+        
+        Args:
+            pred: Predicted probability distribution.
+            target: Target values.
+            prediction_mask: Binary mask for predictions.
+            observed_mask: Binary mask for observed values.
+            sample_id: Sample identifiers.
+            variate_id: Variate identifiers.
+            
+        Returns:
+            Negative log-likelihood loss per token.
+        """
         return -pred.log_prob(target)

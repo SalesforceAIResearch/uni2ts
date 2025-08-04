@@ -21,8 +21,21 @@ from uni2ts.common.torch_util import safe_div
 
 from ._base import PackedPointLoss
 
+# Percentage error loss functions for time series forecasting
+
 
 class PackedMAPELoss(PackedPointLoss):
+    """
+    Mean Absolute Percentage Error (MAPE) loss for time series forecasting.
+    
+    MAPE measures the average percentage difference between predicted and actual values.
+    It is calculated as: 100% * mean(|actual - predicted| / |actual|)
+    
+    This loss is scale-independent, making it useful for comparing forecasts across
+    different scales. However, it can be problematic when actual values are close to zero,
+    as the percentage error can become very large or undefined.
+    """
+    
     def _loss_func(
         self,
         pred: Float[torch.Tensor, "*batch seq_len #dim"],
@@ -32,12 +45,38 @@ class PackedMAPELoss(PackedPointLoss):
         sample_id: Int[torch.Tensor, "*batch seq_len"],
         variate_id: Int[torch.Tensor, "*batch seq_len"],
     ) -> Float[torch.Tensor, "*batch seq_len #dim"]:
+        """
+        Computes the MAPE loss between predictions and targets.
+        
+        Args:
+            pred: Predicted values.
+            target: Target values.
+            prediction_mask: Binary mask for predictions.
+            observed_mask: Binary mask for observed values.
+            sample_id: Sample identifiers.
+            variate_id: Variate identifiers.
+            
+        Returns:
+            MAPE loss per token (as a percentage).
+        """
         loss = F.l1_loss(pred, target, reduction="none")
         loss = safe_div(loss, target.abs())
         return 100 * loss
 
 
 class PackedSMAPELoss(PackedPointLoss):
+    """
+    Symmetric Mean Absolute Percentage Error (SMAPE) loss for time series forecasting.
+    
+    SMAPE is a variation of MAPE that is symmetric, meaning it treats over-forecasting and
+    under-forecasting equally. It is calculated as:
+    200% * mean(|actual - predicted| / (|actual| + |predicted|))
+    
+    This loss addresses some of the issues with MAPE, particularly when actual values are
+    close to zero. The denominator (|actual| + |predicted|) is less likely to be zero
+    compared to just |actual| in MAPE.
+    """
+    
     def _loss_func(
         self,
         pred: Float[torch.Tensor, "*batch seq_len #dim"],
@@ -47,6 +86,20 @@ class PackedSMAPELoss(PackedPointLoss):
         sample_id: Int[torch.Tensor, "*batch seq_len"],
         variate_id: Int[torch.Tensor, "*batch seq_len"],
     ) -> Float[torch.Tensor, "*batch seq_len #dim"]:
+        """
+        Computes the SMAPE loss between predictions and targets.
+        
+        Args:
+            pred: Predicted values.
+            target: Target values.
+            prediction_mask: Binary mask for predictions.
+            observed_mask: Binary mask for observed values.
+            sample_id: Sample identifiers.
+            variate_id: Variate identifiers.
+            
+        Returns:
+            SMAPE loss per token (as a percentage).
+        """
         loss = F.l1_loss(pred, target, reduction="none")
         loss = safe_div(loss, target.abs() + pred.detach().abs())
         return 200 * loss

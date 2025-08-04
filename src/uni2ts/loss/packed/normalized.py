@@ -26,23 +26,45 @@ from uni2ts.common.torch_util import safe_div
 
 from ._base import PackedPointLoss
 
+# Normalized loss functions for time series forecasting
+
 
 class PointNormType(Enum):
-    NONE = "none"
-    ABS_TARGET = "absolute_target"  # normalize by mean abs_target for each obs
-    ABS_TARGET_SQ = "absolute_target_squared"  # matfact def of NRMSE/ND
-    TARGET = "target"  # normalize by mean target for each obs
-    TARGET_SQ = "target_squared"  # classical def of NRMSE/NMAE
+    """
+    Enumeration of normalization types for point forecast losses.
+    
+    Normalization makes loss values more comparable across different scales and
+    datasets by dividing the raw error by some characteristic of the target data.
+    Different normalization strategies are appropriate for different use cases.
+    """
+    
+    NONE = "none"  # No normalization, use raw errors
+    ABS_TARGET = "absolute_target"  # Normalize by mean absolute target value for each observation
+    ABS_TARGET_SQ = "absolute_target_squared"  # Matrix factorization definition of NRMSE/ND
+    TARGET = "target"  # Normalize by mean target value for each observation
+    TARGET_SQ = "target_squared"  # Classical definition of NRMSE/NMAE
     STD_DEV = (
-        "standard_deviation"  # normalize by standard deviation of target for each obs
+        "standard_deviation"  # Normalize by standard deviation of target for each observation
     )
-    VAR = "variance"  # normalize by variance of target for each obs
-    # MAX_MIN = "max_min"
-    # IQR = "interquartile_range"
+    VAR = "variance"  # Normalize by variance of target for each observation
+    # MAX_MIN = "max_min"  # Normalize by range (max - min) of target values
+    # IQR = "interquartile_range"  # Normalize by interquartile range of target values
 
 
 @abstract_class_property("error_func")
 class PackedPointNormalizedLoss(PackedPointLoss, abc.ABC):
+    """
+    Abstract base class for normalized point forecast loss functions.
+    
+    This class provides a framework for implementing loss functions that normalize
+    the error by some characteristic of the target data. Subclasses must define
+    an `error_func` property that computes the raw error between predictions and targets.
+    
+    The normalization is applied by dividing the raw error by a denominator computed
+    based on the specified normalization type. This makes the loss values more
+    comparable across different scales and datasets.
+    """
+    
     error_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = NotImplemented
 
     def __init__(
@@ -51,6 +73,16 @@ class PackedPointNormalizedLoss(PackedPointLoss, abc.ABC):
         correction: int = 1,
         epsilon: float = 1e-5,
     ):
+        """
+        Initialize the normalized loss function.
+        
+        Args:
+            normalize: Type of normalization to apply. Default is NONE (no normalization).
+            correction: Correction factor for variance calculation (Bessel's correction).
+                       Default is 1 for unbiased estimation.
+            epsilon: Small constant added to denominators to prevent division by zero.
+                    Default is 1e-5.
+        """
         super().__init__()
         self.normalize = PointNormType(normalize)
         self.correction = correction
@@ -65,6 +97,24 @@ class PackedPointNormalizedLoss(PackedPointLoss, abc.ABC):
         sample_id: Int[torch.Tensor, "*batch seq_len"],
         variate_id: Int[torch.Tensor, "*batch seq_len"],
     ) -> Float[torch.Tensor, "*batch seq_len #dim"]:
+        """
+        Compute the normalized loss between predictions and targets.
+        
+        This method computes the raw error using the subclass-defined error_func,
+        then normalizes it by dividing by a denominator based on the specified
+        normalization type.
+        
+        Args:
+            pred: Predicted values.
+            target: Target values.
+            prediction_mask: Binary mask for predictions.
+            observed_mask: Binary mask for observed values.
+            sample_id: Sample identifiers.
+            variate_id: Variate identifiers.
+            
+        Returns:
+            Normalized loss per token.
+        """
         loss = self.error_func(pred, target)
         denominator = self.denominator_func(
             target, observed_mask, sample_id, variate_id
@@ -74,6 +124,18 @@ class PackedPointNormalizedLoss(PackedPointLoss, abc.ABC):
 
     @property
     def denominator_func(self) -> Callable:
+        """
+        Get the appropriate denominator function based on the normalization type.
+        
+        This property maps the normalization type to the corresponding denominator
+        function that will be used to normalize the raw error.
+        
+        Returns:
+            Function that computes the denominator for normalization.
+        
+        Raises:
+            ValueError: If an invalid normalization type is specified.
+        """
         func_map = {
             PointNormType.NONE: self.none_denominator,
             PointNormType.ABS_TARGET: self.abs_target_denominator,
@@ -209,14 +271,56 @@ class PackedPointNormalizedLoss(PackedPointLoss, abc.ABC):
 
 
 class PackedNMAELoss(PackedPointNormalizedLoss):
+    """
+    Normalized Mean Absolute Error (NMAE) loss for time series forecasting.
+    
+    NMAE normalizes the Mean Absolute Error (MAE) by a characteristic of the target data,
+    such as the mean absolute value, mean value, or standard deviation. This makes the
+    loss values more comparable across different scales and datasets.
+    
+    The normalization type is specified during initialization and determines how the
+    raw MAE is normalized. For example, with ABS_TARGET normalization, the loss becomes
+    mean(|actual - predicted|) / mean(|actual|), which is similar to MAPE but with a
+    different denominator aggregation.
+    """
+    
     error_func = torch.nn.L1Loss(reduction="none")
 
 
 class PackedNMSELoss(PackedPointNormalizedLoss):
+    """
+    Normalized Mean Squared Error (NMSE) loss for time series forecasting.
+    
+    NMSE normalizes the Mean Squared Error (MSE) by a characteristic of the target data,
+    such as the squared mean value, variance, or squared mean absolute value. This makes
+    the loss values more comparable across different scales and datasets.
+    
+    The normalization type is specified during initialization and determines how the
+    raw MSE is normalized. For example, with VAR normalization, the loss becomes
+    mean((actual - predicted)²) / var(actual), which measures the error relative to
+    the inherent variability of the target data.
+    """
+    
     error_func = torch.nn.MSELoss(reduction="none")
 
 
 class PackedNRMSELoss(PackedPointNormalizedLoss):
+    """
+    Normalized Root Mean Squared Error (NRMSE) loss for time series forecasting.
+    
+    NRMSE normalizes the Root Mean Squared Error (RMSE) by a characteristic of the target data,
+    such as the mean value, standard deviation, or mean absolute value. This makes the
+    loss values more comparable across different scales and datasets.
+    
+    The normalization type is specified during initialization and determines how the
+    raw RMSE is normalized. For example, with STD_DEV normalization, the loss becomes
+    sqrt(mean((actual - predicted)²)) / std(actual), which measures the error in units
+    of standard deviations.
+    
+    This class overrides the reduce_loss method to apply the square root operation
+    before normalization, which distinguishes it from NMSELoss.
+    """
+    
     error_func = torch.nn.MSELoss(reduction="none")
 
     def reduce_loss(
@@ -261,9 +365,28 @@ class PackedNRMSELoss(PackedPointNormalizedLoss):
 
 
 class PackedNMLSELoss(PackedPointNormalizedLoss):
+    """
+    Normalized Mean Logarithmic Squared Error (NMLSE) loss for time series forecasting.
+    
+    NMLSE applies a logarithmic transformation to the normalized MSE, which can be useful
+    for handling data with exponential growth or when errors span multiple orders of magnitude.
+    It is calculated as: log(1 + MSE / variance).
+    
+    This loss is always normalized by the variance of the target data (PointNormType.VAR),
+    as this provides a natural scale for the logarithmic transformation. The logarithmic
+    transformation makes the loss less sensitive to large errors compared to NMSE.
+    """
+    
     error_func = torch.nn.MSELoss(reduction="none")
 
     def __init__(self, df: float = 1.0):
+        """
+        Initialize the NMLSE loss.
+        
+        Args:
+            df: Degrees of freedom parameter that scales the normalized MSE before
+                applying the logarithmic transformation. Default is 1.0.
+        """
         super().__init__(PointNormType.VAR)
         self.df = df
 
@@ -276,6 +399,24 @@ class PackedNMLSELoss(PackedPointNormalizedLoss):
         sample_id: Int[torch.Tensor, "*batch seq_len"],
         variate_id: Int[torch.Tensor, "*batch seq_len"],
     ) -> Float[torch.Tensor, "*batch seq_len #dim"]:
+        """
+        Compute the NMLSE loss between predictions and targets.
+        
+        This method first computes the normalized MSE using the parent class method,
+        then applies a logarithmic transformation using log1p (log(1+x)) to reduce
+        sensitivity to large errors.
+        
+        Args:
+            pred: Predicted values.
+            target: Target values.
+            prediction_mask: Binary mask for predictions.
+            observed_mask: Binary mask for observed values.
+            sample_id: Sample identifiers.
+            variate_id: Variate identifiers.
+            
+        Returns:
+            NMLSE loss per token.
+        """
         loss = super()._loss_func(
             pred, target, prediction_mask, observed_mask, sample_id, variate_id
         )
