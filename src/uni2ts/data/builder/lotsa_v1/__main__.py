@@ -33,7 +33,9 @@ from . import (
     SubseasonalDatasetBuilder,
 )
 
+# Create an argument parser to handle command-line arguments.
 parser = argparse.ArgumentParser()
+# Add an argument for the builder name, with a limited set of choices.
 parser.add_argument(
     "builder",
     type=str,
@@ -51,6 +53,7 @@ parser.add_argument(
         "subseasonal",
     ],
 )
+# Add an optional argument for specifying which datasets to generate.
 parser.add_argument(
     "--datasets",
     type=str,
@@ -58,18 +61,22 @@ parser.add_argument(
     default=None,
     help="The datasets to generate",
 )
+# Add an optional argument for the storage path, with a default value from the environment.
 parser.add_argument(
     "--storage_path",
     type=Path,
     default=env.LOTSA_V1_PATH,
     help="Path of directory to save the datasets",
 )
+# Add an optional flag to allow overwriting existing datasets.
 parser.add_argument(
     "--overwrite",
     action="store_true",
 )
+# Parse the command-line arguments.
 args = parser.parse_args()
 
+# A dictionary mapping builder names to their corresponding classes.
 Builder = {
     "buildings_900k": Buildings900KDatasetBuilder,
     "buildings_bench": BuildingsBenchDatasetBuilder,
@@ -84,13 +91,17 @@ Builder = {
     "subseasonal": SubseasonalDatasetBuilder,
 }[args.builder]
 
+# Determine the set of datasets to build.
 datasets = set(args.datasets or Builder.dataset_list)
+# Find which datasets already exist in the storage path.
 found = {directory.stem for directory in args.storage_path.iterdir()}
 overlap = datasets & found
 
+# If there are overlapping datasets, print a message.
 if len(overlap) > 0:
     print(f"Found datasets already present in storage path: {overlap}")
 
+# If not overwriting, remove the existing datasets from the set to be built.
 if not args.overwrite:
     datasets = datasets - found
     if len(overlap) > 0:
@@ -99,19 +110,24 @@ if not args.overwrite:
 else:
     print(f"Overwriting existing datasets, building: {datasets}")
 
+# A dictionary to store any failed dataset builds.
 failed = {}
+# Iterate over the datasets to be built.
 for dataset in datasets:
     try:
         print(f"Building: {dataset}")
+        # Instantiate the builder and build the dataset.
         Builder(
             datasets=list(datasets),
             storage_path=args.storage_path,
         ).build_dataset(dataset=dataset)
         print(f"Successfully built {dataset}")
     except Exception as e:
+        # If an exception occurs, record the failure.
         print(f"Failed to build {dataset}")
         failed[dataset] = traceback.format_exc()
 
+# If there were any failures, print a summary.
 if len(failed) > 0:
     print(f"Failed: {list(failed.keys())}")
     for k, v in failed.items():

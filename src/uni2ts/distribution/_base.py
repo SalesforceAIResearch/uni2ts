@@ -32,7 +32,17 @@ from uni2ts.module.ts_embed import MultiOutSizeLinear
 def tree_map_multi(
     func: Callable, tree: PyTree[Any, "T"], *other: PyTree[Any, "T"]
 ) -> PyTree[Any, "T"]:
-    """Tree map with function requiring multiple inputs, where other inputs are from a PyTree too."""
+    """
+    A tree map function that applies a function to the leaves of multiple PyTrees.
+
+    Args:
+        func (Callable): The function to apply to the leaves.
+        tree (PyTree[Any, "T"]): The primary PyTree.
+        *other (PyTree[Any, "T"]): The other PyTrees.
+
+    Returns:
+        PyTree[Any, "T"]: A new PyTree with the function applied to the leaves.
+    """
     leaves, treespec = tree_flatten(tree)
     other_leaves = [tree_flatten(o)[0] for o in other]
     return_leaves = [func(*leaf) for leaf in zip(leaves, *other_leaves)]
@@ -40,7 +50,16 @@ def tree_map_multi(
 
 
 def convert_to_module(tree: PyTree[nn.Module, "T"]) -> PyTree[nn.Module, "T"]:
-    """Convert a simple container PyTree into an nn.Module PyTree"""
+    """
+    Converts a PyTree of simple containers (dicts, lists, tuples) into a PyTree of
+    `nn.Module` containers (`nn.ModuleDict`, `nn.ModuleList`).
+
+    Args:
+        tree (PyTree[nn.Module, "T"]): The PyTree to convert.
+
+    Returns:
+        PyTree[nn.Module, "T"]: The converted PyTree.
+    """
     if isinstance(tree, dict):
         return nn.ModuleDict(
             {key: convert_to_module(child) for key, child in tree.items()}
@@ -51,7 +70,16 @@ def convert_to_module(tree: PyTree[nn.Module, "T"]) -> PyTree[nn.Module, "T"]:
 
 
 def convert_to_container(tree: PyTree[nn.Module, "T"]) -> PyTree[nn.Module, "T"]:
-    """Convert an nn.Module PyTree into a simple container PyTree"""
+    """
+    Converts a PyTree of `nn.Module` containers (`nn.ModuleDict`, `nn.ModuleList`)
+    into a PyTree of simple containers (dicts, lists, tuples).
+
+    Args:
+        tree (PyTree[nn.Module, "T"]): The PyTree to convert.
+
+    Returns:
+        PyTree[nn.Module, "T"]: The converted PyTree.
+    """
     if isinstance(tree, nn.ModuleDict):
         return {key: convert_to_container(child) for key, child in tree.items()}
     if isinstance(tree, nn.ModuleList):
@@ -61,7 +89,20 @@ def convert_to_container(tree: PyTree[nn.Module, "T"]) -> PyTree[nn.Module, "T"]
 
 class DistrParamProj(nn.Module):
     """
-    Projection layer from representations to distribution parameters.
+    A projection layer that maps a representation to the parameters of a distribution.
+
+    Args:
+        in_features (int): The size of the input representation.
+        out_features (int | tuple[int, ...] | list[int]): The size multiplier for the
+            distribution parameters.
+        args_dim (PyTree[int, "T"]): A PyTree specifying the dimensionality of each
+            distribution parameter.
+        domain_map (PyTree[Callable[[torch.Tensor], torch.Tensor], "T"]): A PyTree of
+            functions that map the unbounded distribution parameters to the valid
+            domain for each parameter.
+        proj_layer (Callable[..., nn.Module], optional): The projection layer to use.
+            Defaults to `MultiOutSizeLinear`.
+        **kwargs (Any): Additional keyword arguments for the projection layer.
     """
 
     def __init__(
@@ -73,14 +114,6 @@ class DistrParamProj(nn.Module):
         proj_layer: Callable[..., nn.Module] = MultiOutSizeLinear,
         **kwargs: Any,
     ):
-        """
-        :param in_features: size of representation
-        :param out_features: size multiplier of distribution parameters
-        :param args_dim: dimensionality of distribution parameters
-        :param domain_map: mapping for distribution parameters
-        :param proj_layer: projection layer
-        :param kwargs: additional kwargs for proj_layer
-        """
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -128,6 +161,18 @@ class DistrParamProj(nn.Module):
 
 
 class AffineTransformed(TransformedDistribution):
+    """
+    A distribution that applies an affine transformation to a base distribution.
+
+    Args:
+        base_dist (Distribution): The base distribution.
+        loc (Optional[torch.Tensor | float], optional): The location parameter.
+            Defaults to None.
+        scale (Optional[torch.Tensor | float], optional): The scale parameter.
+            Defaults to None.
+        validate_args (Optional[bool], optional): Whether to validate the arguments.
+            Defaults to None.
+    """
     def __init__(
         self,
         base_dist: Distribution,
@@ -155,8 +200,8 @@ class AffineTransformed(TransformedDistribution):
 @abstract_class_property("distr_cls")
 class DistributionOutput:
     """
-    Base class for distribution outputs.
-    Defines the type of output distribution and provides several helper methods for predictive distributions.
+    An abstract base class for distribution outputs. It defines the type of output
+    distribution and provides helper methods for creating predictive distributions.
     """
 
     distr_cls: type[Distribution] = NotImplemented
@@ -168,6 +213,21 @@ class DistributionOutput:
         scale: Optional[torch.Tensor] = None,
         validate_args: Optional[bool] = None,
     ) -> Distribution:
+        """
+        Creates a distribution from the given parameters.
+
+        Args:
+            distr_params (PyTree[torch.Tensor, "T"]): The parameters of the distribution.
+            loc (Optional[torch.Tensor], optional): The location parameter for an
+                affine transformation. Defaults to None.
+            scale (Optional[torch.Tensor], optional): The scale parameter for an
+                affine transformation. Defaults to None.
+            validate_args (Optional[bool], optional): Whether to validate the
+                arguments. Defaults to None.
+
+        Returns:
+            Distribution: The created distribution.
+        """
         distr = self._distribution(distr_params, validate_args=validate_args)
         if loc is not None or scale is not None:
             distr = AffineTransformed(distr, loc=loc, scale=scale)
@@ -178,18 +238,16 @@ class DistributionOutput:
         distr_params: PyTree[torch.Tensor, "T"],
         validate_args: Optional[bool] = None,
     ) -> Distribution:
+        """
+        Creates the base distribution from the given parameters.
+        """
         return self.distr_cls(**distr_params, validate_args=validate_args)
 
     @property
     @abc.abstractmethod
     def args_dim(self) -> PyTree[int, "T"]:
         """
-        Returns the dimensionality of the distribution parameters in the form of a pytree.
-        For simple distributions, this will be a simple dictionary:
-        e.g. for a univariate normal distribution, the args_dim should return {"loc": 1, "scale": 1}.
-        For more complex distributions, this could be an arbitrarily complex pytree.
-
-        :return: pytree of integers representing the dimensionality of the distribution parameters
+        Returns a PyTree specifying the dimensionality of each distribution parameter.
         """
         ...
 
@@ -197,10 +255,8 @@ class DistributionOutput:
     @abc.abstractmethod
     def domain_map(self) -> PyTree[Callable[[torch.Tensor], torch.Tensor], "T"]:
         """
-        Returns a pytree of callables that maps the unconstrained distribution parameters
-        to the range required by their distributions.
-
-        :return: callables in the same PyTree format as args_dim
+        Returns a PyTree of functions that map the unbounded distribution parameters
+        to the valid domain for each parameter.
         """
         ...
 
@@ -212,13 +268,19 @@ class DistributionOutput:
         **kwargs: Any,
     ) -> nn.Module:
         """
-        Get a projection layer mapping representations to distribution parameters.
+        Returns a projection layer that maps a representation to the parameters of
+        the distribution.
 
-        :param in_features: input feature dimension
-        :param out_features: size multiplier of distribution parameters
-        :param proj_layer: projection layer
-        :param kwargs: additional kwargs for proj_layer
-        :return: distribution parameter projection layer
+        Args:
+            in_features (int): The size of the input representation.
+            out_features (int | tuple[int, ...] | list[int]): The size multiplier
+                for the distribution parameters.
+            proj_layer (Callable[..., nn.Module], optional): The projection layer
+                to use. Defaults to `MultiOutSizeLinear`.
+            **kwargs (Any): Additional keyword arguments for the projection layer.
+
+        Returns:
+            nn.Module: The projection layer.
         """
         return DistrParamProj(
             in_features=in_features,

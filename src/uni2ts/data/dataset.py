@@ -35,10 +35,12 @@ from uni2ts.transform import Transformation
 
 class SampleTimeSeriesType(Enum):
     """
-    How to sample from the dataset.
-    - none: do not sample, return the current index.
-    - uniform: each time series sampled with equal probability
-    - proportional: each time series sampled with probability proportional to it's length
+    An enumeration that defines how to sample time series from a dataset.
+
+    Attributes:
+        NONE: Do not sample; return the time series at the current index.
+        UNIFORM: Sample each time series with equal probability.
+        PROPORTIONAL: Sample each time series with a probability proportional to its length.
     """
 
     NONE = "none"
@@ -47,6 +49,19 @@ class SampleTimeSeriesType(Enum):
 
 
 class TimeSeriesDataset(Dataset):
+    """
+    A PyTorch Dataset for handling time series data. It wraps an Indexer and applies a
+    transformation to the data. It also supports different sampling strategies for
+    retrieving time series.
+
+    Args:
+        indexer (Indexer[dict[str, Any]]): The underlying Indexer object that provides access to the data.
+        transform (Transformation): A transformation to apply to the time series data.
+        sample_time_series (SampleTimeSeriesType, optional): The sampling strategy to use.
+            Defaults to SampleTimeSeriesType.NONE.
+        dataset_weight (float, optional): A multiplicative factor to apply to the dataset size.
+            Defaults to 1.0.
+    """
     def __init__(
         self,
         indexer: Indexer[dict[str, Any]],
@@ -54,12 +69,6 @@ class TimeSeriesDataset(Dataset):
         sample_time_series: SampleTimeSeriesType = SampleTimeSeriesType.NONE,
         dataset_weight: float = 1.0,
     ):
-        """
-        :param indexer: Underlying Indexer object
-        :param transform: Transformation to apply to time series
-        :param sample_time_series: defines how a time series is obtained from the dataset
-        :param dataset_weight: multiplicative factor to apply to dataset size
-        """
         self.indexer = indexer
         self.transform = transform
         self.sample_time_series = sample_time_series
@@ -76,9 +85,15 @@ class TimeSeriesDataset(Dataset):
 
     def __getitem__(self, idx: int) -> dict[str, FlattenedData]:
         """
-        Obtain a time series from the dataset, flatten
-        :param idx: index of time series to retrieve. if sample_time_series is specified, this will be ignored.
-        :return: transformed time series data
+        Retrieves a time series from the dataset, applies a transformation, and returns it.
+        If a sampling strategy is specified, `idx` is ignored and a time series is sampled
+        according to the strategy.
+
+        Args:
+            idx (int): The index of the time series to retrieve.
+
+        Returns:
+            dict[str, FlattenedData]: The transformed time series data.
         """
         if idx < 0 or idx >= len(self):
             raise IndexError(
@@ -93,26 +108,27 @@ class TimeSeriesDataset(Dataset):
     @property
     def num_ts(self) -> int:
         """
-        Get the number of time series in the dataset
+        Returns the number of time series in the dataset.
         """
         return len(self.indexer)
 
     def __len__(self) -> int:
         """
-        Length is the number of time series multiplied by dataset_weight
+        Returns the length of the dataset, which is the number of time series
+        multiplied by the dataset_weight.
         """
         return int(np.ceil(self.num_ts * self.dataset_weight))
 
     def _get_data(self, idx: int) -> dict[str, Data | BatchedData]:
         """
-        Obtains time series from Indexer object
+        Retrieves a time series from the underlying Indexer object.
         """
         return self.indexer[idx % self.num_ts]
 
     @staticmethod
     def _flatten_data(data: dict[str, Data]) -> dict[str, FlattenedData]:
         """
-        Convert time series type data into a list of univariate time series
+        Converts multivariate time series data into a list of univariate time series.
         """
         return {
             k: (
@@ -126,8 +142,21 @@ class TimeSeriesDataset(Dataset):
 
 class MultiSampleTimeSeriesDataset(TimeSeriesDataset):
     """
-    Samples multiple time series and stacks them into a single time series.
-    Underlying dataset should have aligned time series, meaning same start and end dates.
+    A dataset that samples multiple time series and stacks them into a single sample.
+    This is useful for creating models that can process multiple time series at once.
+    The underlying dataset should have aligned time series (i.e., same start and end dates).
+
+    Args:
+        indexer (Indexer[dict[str, Any]]): The underlying Indexer object.
+        transform (Transformation): A transformation to apply to the time series data.
+        max_ts (int): The maximum number of time series that can be stacked together.
+        combine_fields (tuple[str, ...]): A tuple of field names that should be stacked.
+        sample_time_series (SampleTimeSeriesType, optional): The sampling strategy to use.
+            Defaults to SampleTimeSeriesType.NONE.
+        dataset_weight (float, optional): A multiplicative factor to apply to the dataset size.
+            Defaults to 1.0.
+        sampler (Sampler, optional): A sampler function to determine how many time series to sample.
+            Defaults to a beta-binomial sampler.
     """
 
     def __init__(
@@ -140,21 +169,15 @@ class MultiSampleTimeSeriesDataset(TimeSeriesDataset):
         dataset_weight: float = 1.0,
         sampler: Sampler = get_sampler("beta_binomial", a=2, b=5),
     ):
-        """
-        :param indexer: Underlying Indexer object
-        :param transform: Transformation to apply to time series
-        :param max_ts: maximum number of time series that can be stacked together
-        :param combine_fields: fields which should be stacked
-        :param sample_time_series: defines how a time series is obtained from the dataset
-        :param dataset_weight: multiplicative factor to apply to dataset size
-        :param sampler: how to sample the other time series
-        """
         super().__init__(indexer, transform, sample_time_series, dataset_weight)
         self.max_ts = max_ts
         self.combine_fields = combine_fields
         self.sampler = sampler
 
     def _get_data(self, idx: int) -> dict[str, BatchedData]:
+        """
+        Retrieves multiple time series from the indexer and combines them.
+        """
         n_series = self.sampler(min(self.num_ts, self.max_ts))
         choices = np.concatenate([np.arange(idx), np.arange(idx + 1, self.num_ts)])
         others = np.random.choice(choices, n_series - 1, replace=False)
@@ -164,6 +187,11 @@ class MultiSampleTimeSeriesDataset(TimeSeriesDataset):
     def _flatten_data(
         self, samples: dict[str, BatchedData]
     ) -> dict[str, FlattenedData]:
+        """
+        Flattens the combined time series data. For fields specified in `combine_fields`,
+        it combines the list of multivariate time series into a single list of univariate
+        time series. For other fields, it takes the first element.
+        """
         for field in samples.keys():
             if field in self.combine_fields:
                 item = samples[field]
@@ -184,8 +212,14 @@ class MultiSampleTimeSeriesDataset(TimeSeriesDataset):
 
 class EvalDataset(TimeSeriesDataset):
     """
-    Dataset class for validation.
-    Should be used in conjunction with Eval transformations.
+    A dataset class specifically for evaluation. It is designed to be used with
+    evaluation-specific transformations. It creates multiple evaluation windows
+    for each time series in the dataset.
+
+    Args:
+        windows (int): The number of evaluation windows to create for each time series.
+        indexer (Indexer[dict[str, Any]]): The underlying Indexer object.
+        transform (Transformation): A transformation to apply to the time series data.
     """
 
     def __init__(
@@ -194,9 +228,6 @@ class EvalDataset(TimeSeriesDataset):
         indexer: Indexer[dict[str, Any]],
         transform: Transformation,
     ):
-        """
-        :param windows: number of windows to perform evaluation on
-        """
         super().__init__(
             indexer,
             transform,
@@ -205,6 +236,10 @@ class EvalDataset(TimeSeriesDataset):
         )
 
     def _get_data(self, idx: int) -> dict[str, Data]:
+        """
+        Retrieves a time series and adds a "window" key to it, which can be used
+        by evaluation transformations.
+        """
         window, idx = divmod(idx, self.num_ts)
         item = self.indexer[idx]
         item["window"] = window

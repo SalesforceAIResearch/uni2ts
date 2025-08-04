@@ -46,6 +46,9 @@ MULTI_SAMPLE_DATASETS = [
 
 
 class BuildingsBenchDatasetBuilder(LOTSADatasetBuilder):
+    """
+    A dataset builder for the BuildingsBench dataset.
+    """
     dataset_list = [
         "sceaux",
         "borealis",
@@ -70,6 +73,12 @@ class BuildingsBenchDatasetBuilder(LOTSADatasetBuilder):
     }
 
     def build_dataset(self, dataset: str):
+        """
+        Builds a single dataset from the BuildingsBench dataset.
+
+        Args:
+            dataset (str): The name of the dataset to build.
+        """
         def gen_func() -> Generator[dict[str, Any], None, None]:
             if dataset.startswith("bdg"):
                 pd_dataset = load_pandas_dataset(dataset.replace("_", ":"))
@@ -109,6 +118,9 @@ class BuildingsBenchDatasetBuilder(LOTSADatasetBuilder):
 
 
 class Buildings900KDatasetBuilder(LOTSADatasetBuilder):
+    """
+    A dataset builder for the Buildings-900K dataset.
+    """
     dataset_list: list[str] = ["buildings_900k"]
     dataset_type_map = dict(buildings_900k=TimeSeriesDataset)
     dataset_load_func_map = dict(
@@ -116,6 +128,13 @@ class Buildings900KDatasetBuilder(LOTSADatasetBuilder):
     )
 
     def build_dataset(self, dataset: str, num_proc: int = os.cpu_count()):
+        """
+        Builds the Buildings-900K dataset.
+
+        Args:
+            dataset (str): The name of the dataset to build.
+            num_proc (int, optional): The number of processes to use. Defaults to the number of CPUs.
+        """
         all_jobs = []
         building_type_and_years = [
             "comstock_amy2018",

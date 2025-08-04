@@ -39,6 +39,18 @@ def _from_long_dataframe(
     date_offset: Optional[pd.Timestamp] = None,
     freq: str = "H",
 ) -> tuple[GenFunc, Features]:
+    """
+    Converts a long format DataFrame to a generator function and HuggingFace Features.
+
+    Args:
+        df (pd.DataFrame): The long format DataFrame.
+        offset (Optional[int], optional): The offset to slice the DataFrame. Defaults to None.
+        date_offset (Optional[pd.Timestamp], optional): The date offset to slice the DataFrame. Defaults to None.
+        freq (str, optional): The frequency of the time series. Defaults to "H".
+
+    Returns:
+        tuple[GenFunc, Features]: A tuple containing the generator function and the HuggingFace Features.
+    """
     items = df.item_id.unique()
 
     # Infer the freq and generate the prompt
@@ -89,6 +101,18 @@ def _from_wide_dataframe(
     date_offset: Optional[pd.Timestamp] = None,
     freq: str = "H",
 ) -> tuple[GenFunc, Features]:
+    """
+    Converts a wide format DataFrame to a generator function and HuggingFace Features.
+
+    Args:
+        df (pd.DataFrame): The wide format DataFrame.
+        offset (Optional[int], optional): The offset to slice the DataFrame. Defaults to None.
+        date_offset (Optional[pd.Timestamp], optional): The date offset to slice the DataFrame. Defaults to None.
+        freq (str, optional): The frequency of the time series. Defaults to "H".
+
+    Returns:
+        tuple[GenFunc, Features]: A tuple containing the generator function and the HuggingFace Features.
+    """
     if offset is not None:
         df = df.iloc[:offset]
     elif date_offset is not None:
@@ -139,6 +163,18 @@ def _from_wide_dataframe_multivariate(
     date_offset: Optional[pd.Timestamp] = None,
     freq: str = "H",
 ) -> tuple[GenFunc, Features]:
+    """
+    Converts a wide format multivariate DataFrame to a generator function and HuggingFace Features.
+
+    Args:
+        df (pd.DataFrame): The wide format multivariate DataFrame.
+        offset (Optional[int], optional): The offset to slice the DataFrame. Defaults to None.
+        date_offset (Optional[pd.Timestamp], optional): The date offset to slice the DataFrame. Defaults to None.
+        freq (str, optional): The frequency of the time series. Defaults to "H".
+
+    Returns:
+        tuple[GenFunc, Features]: A tuple containing the generator function and the HuggingFace Features.
+    """
     if offset is not None:
         df = df.iloc[:offset]
     elif date_offset is not None:
@@ -180,6 +216,16 @@ def _from_wide_dataframe_multivariate(
 
 @dataclass
 class SimpleDatasetBuilder(DatasetBuilder):
+    """
+    A simple dataset builder that can build datasets from CSV files.
+
+    Args:
+        dataset (str): The name of the dataset.
+        weight (float, optional): The weight of the dataset. Defaults to 1.0.
+        sample_time_series (Optional[SampleTimeSeriesType], optional): The time series sampling type.
+            Defaults to SampleTimeSeriesType.NONE.
+        storage_path (Path, optional): The path to store the dataset. Defaults to env.CUSTOM_DATA_PATH.
+    """
     dataset: str
     weight: float = 1.0
     sample_time_series: Optional[SampleTimeSeriesType] = SampleTimeSeriesType.NONE
@@ -196,6 +242,16 @@ class SimpleDatasetBuilder(DatasetBuilder):
         date_offset: Optional[pd.Timestamp] = None,
         freq: str = "H",
     ):
+        """
+        Builds a dataset from a CSV file.
+
+        Args:
+            file (Path): The path to the CSV file.
+            dataset_type (str): The type of the dataset. Can be "long", "wide", or "wide_multivariate".
+            offset (Optional[int], optional): The offset to slice the DataFrame. Defaults to None.
+            date_offset (Optional[pd.Timestamp], optional): The date offset to slice the DataFrame. Defaults to None.
+            freq (str, optional): The frequency of the time series. Defaults to "H".
+        """
         assert offset is None or date_offset is None, (
             "One or neither offset and date_offset must be specified, but not both. "
             f"Got offset: {offset}, date_offset: {date_offset}"
@@ -227,6 +283,15 @@ class SimpleDatasetBuilder(DatasetBuilder):
     def load_dataset(
         self, transform_map: dict[str, Callable[..., Transformation]]
     ) -> Dataset:
+        """
+        Loads a dataset from disk.
+
+        Args:
+            transform_map (dict[str, Callable[..., Transformation]]): A dictionary mapping dataset names to transformations.
+
+        Returns:
+            Dataset: The loaded dataset.
+        """
         return TimeSeriesDataset(
             HuggingFaceDatasetIndexer(
                 datasets.load_from_disk(
@@ -241,6 +306,19 @@ class SimpleDatasetBuilder(DatasetBuilder):
 
 @dataclass
 class SimpleEvalDatasetBuilder(DatasetBuilder):
+    """
+    A simple evaluation dataset builder that can build datasets from CSV files.
+
+    Args:
+        dataset (str): The name of the dataset.
+        offset (Optional[int]): The offset to slice the DataFrame.
+        windows (Optional[int]): The number of windows to create.
+        distance (Optional[int]): The distance between windows.
+        prediction_length (Optional[int]): The prediction length.
+        context_length (Optional[int]): The context length.
+        patch_size (Optional[int]): The patch size.
+        storage_path (Path, optional): The path to store the dataset. Defaults to env.CUSTOM_DATA_PATH.
+    """
     dataset: str
     offset: Optional[int]
     windows: Optional[int]
@@ -254,6 +332,14 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
         self.storage_path = Path(self.storage_path)
 
     def build_dataset(self, file: Path, dataset_type: str, freq: str = "H"):
+        """
+        Builds an evaluation dataset from a CSV file.
+
+        Args:
+            file (Path): The path to the CSV file.
+            dataset_type (str): The type of the dataset. Can be "long", "wide", or "wide_multivariate".
+            freq (str, optional): The frequency of the time series. Defaults to "H".
+        """
         df = pd.read_csv(file, index_col=0, parse_dates=True)
 
         if dataset_type == "long":
@@ -278,6 +364,15 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
     def load_dataset(
         self, transform_map: dict[str, Callable[..., Transformation]]
     ) -> Dataset:
+        """
+        Loads an evaluation dataset from disk.
+
+        Args:
+            transform_map (dict[str, Callable[..., Transformation]]): A dictionary mapping dataset names to transformations.
+
+        Returns:
+            Dataset: The loaded dataset.
+        """
         return EvalDataset(
             self.windows,
             HuggingFaceDatasetIndexer(
@@ -304,6 +399,21 @@ def generate_eval_builders(
     patch_sizes: list[int],
     storage_path: Path = env.CUSTOM_DATA_PATH,
 ) -> list[SimpleEvalDatasetBuilder]:
+    """
+    Generates a list of SimpleEvalDatasetBuilder instances for a given set of evaluation parameters.
+
+    Args:
+        dataset (str): The name of the dataset.
+        offset (int): The offset to slice the DataFrame.
+        eval_length (int): The length of the evaluation set.
+        prediction_lengths (list[int]): A list of prediction lengths.
+        context_lengths (list[int]): A list of context lengths.
+        patch_sizes (list[int]): A list of patch sizes.
+        storage_path (Path, optional): The path to store the dataset. Defaults to env.CUSTOM_DATA_PATH.
+
+    Returns:
+        list[SimpleEvalDatasetBuilder]: A list of SimpleEvalDatasetBuilder instances.
+    """
     return [
         SimpleEvalDatasetBuilder(
             dataset=dataset,

@@ -244,35 +244,3 @@ python -m cli.train \
   data=lotsa_v1_unweighted
 ```
 
-## 👀 Citation
-
-If you're using this repository in your research or applications, please cite using the following BibTeX:
-
-```markdown
-@article{liu2024moiraimoe,
-  title={Moirai-MoE: Empowering Time Series Foundation Models with Sparse Mixture of Experts},
-  author={Liu, Xu and Liu, Juncheng and Woo, Gerald and Aksu, Taha and Liang, Yuxuan and Zimmermann, Roger and Liu, Chenghao and Savarese, Silvio and Xiong, Caiming and Sahoo, Doyen},
-  journal={arXiv preprint arXiv:2410.10469},
-  year={2024}
-}
-
-@article{aksu2024gifteval,
-  title={GIFT-Eval: A Benchmark For General Time Series Forecasting Model Evaluation},
-  author={Aksu, Taha and Woo, Gerald and Liu, Juncheng and Liu, Xu and Liu, Chenghao and Savarese, Silvio and Xiong, Caiming and Sahoo, Doyen},
-  journal={arXiv preprint arXiv:2410.10393},
-  year={2024}
-}
-
-@inproceedings{woo2024moirai,
-  title={Unified Training of Universal Time Series Forecasting Transformers},
-  author={Woo, Gerald and Liu, Chenghao and Kumar, Akshat and Xiong, Caiming and Savarese, Silvio and Sahoo, Doyen},
-  booktitle={Forty-first International Conference on Machine Learning},
-  year={2024}
-}
-```
-
-## Ethical Considerations
-
-This release is for research purposes only in support of an academic paper. Our models, datasets, and code are not specifically designed or evaluated for all downstream purposes. We strongly recommend users evaluate and address potential concerns related to accuracy, safety, and fairness before deploying this model. We encourage users to consider the common limitations of AI, comply with applicable laws, and leverage best practices when selecting use cases, particularly for high-risk scenarios where errors or misuse could significantly impact people’s lives, rights, or safety. For further guidance on use cases, refer to our AUP and AI AUP. 
-
-

@@ -25,6 +25,15 @@ from ._base import DistributionOutput
 
 
 class NegativeBinomial(Distribution):
+    """
+    A Negative Binomial distribution.
+
+    Args:
+        total_count (float | torch.Tensor): The number of failures until the experiment is stopped.
+        logits (float | torch.Tensor): The log-odds of success.
+        validate_args (Optional[bool], optional): Whether to validate the arguments.
+            Defaults to None.
+    """
     arg_constraints = {
         "total_count": constraints.positive,
         "logits": constraints.real,
@@ -98,6 +107,9 @@ class NegativeBinomial(Distribution):
 
 
 class NegativeBinomialOutput(DistributionOutput):
+    """
+    A distribution output for the Negative Binomial distribution.
+    """
     distr_cls = NegativeBinomial
     args_dim = dict(total_count=1, logits=1)
 
@@ -107,6 +119,10 @@ class NegativeBinomialOutput(DistributionOutput):
     ) -> PyTree[
         Callable[[Float[torch.Tensor, "*batch 1"]], Float[torch.Tensor, "*batch"]], "T"
     ]:
+        """
+        Returns a PyTree of functions that map the unbounded distribution parameters
+        to the valid domain for each parameter.
+        """
         return dict(total_count=self._total_count, logits=self._logits)
 
     @staticmethod

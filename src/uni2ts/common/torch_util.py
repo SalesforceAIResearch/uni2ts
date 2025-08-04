@@ -32,11 +32,22 @@ numpy_to_torch_dtype_dict = {
     np.complex64: torch.complex64,
     np.complex128: torch.complex128,
 }
+"""Mapping from numpy dtypes to PyTorch dtypes."""
 
 
 def packed_attention_mask(
     sample_id: Int[torch.Tensor, "*batch seq_len"],
 ) -> Bool[torch.Tensor, "*batch seq_len seq_len"]:
+    """
+    Creates a packed attention mask where positions attend only to others
+    with the same sample ID.
+
+    Args:
+        sample_id: Tensor of shape (*batch, seq_len) indicating sample grouping.
+
+    Returns:
+        Boolean mask of shape (*batch, seq_len, seq_len).
+    """
     sample_id = sample_id.unsqueeze(-1)
     attention_mask = sample_id.eq(sample_id.mT)
     return attention_mask
@@ -46,6 +57,17 @@ def packed_causal_attention_mask(
     sample_id: Int[torch.Tensor, "*batch seq_len"],
     time_id: Int[torch.Tensor, "*batch seq_len"],
 ) -> Bool[torch.Tensor, "*batch seq_len seq_len"]:
+    """
+    Creates a packed causal attention mask: positions attend only within the same
+    sample and not to future time steps.
+
+    Args:
+        sample_id: Tensor of sample IDs, shape (*batch, seq_len).
+        time_id: Tensor of time IDs, shape (*batch, seq_len).
+
+    Returns:
+        Boolean causal mask of shape (*batch, seq_len, seq_len).
+    """
     attention_mask = packed_attention_mask(sample_id)
     expanded_id1 = time_id.unsqueeze(-2)
     expanded_id2 = time_id.unsqueeze(-1)
@@ -59,6 +81,17 @@ def mask_fill(
     mask: Bool[torch.Tensor, "*batch"],
     value: Float[torch.Tensor, "dim"],
 ) -> Float[torch.Tensor, "*batch dim"]:
+    """
+    Fills entries of `tensor` with `value` where `mask` is True.
+
+    Args:
+        tensor: Input tensor of shape (*batch, dim).
+        mask: Boolean mask of shape (*batch,), True indicates fill positions.
+        value: Tensor of shape (dim,) providing fill values.
+
+    Returns:
+        Tensor of shape (*batch, dim) with masked fills.
+    """
     mask = mask.unsqueeze(-1)
     return tensor * ~mask + value * mask
 
@@ -67,6 +100,16 @@ def safe_div(
     numer: torch.Tensor,
     denom: torch.Tensor,
 ) -> torch.Tensor:
+    """
+    Divides `numer` by `denom`, replacing zeros in `denom` with 1 to avoid NaNs.
+
+    Args:
+        numer: Numerator tensor.
+        denom: Denominator tensor.
+
+    Returns:
+        Elementwise division result.
+    """
     return numer / torch.where(
         denom == 0,
         1.0,
@@ -78,6 +121,16 @@ def size_to_mask(
     max_size: int,
     sizes: Int[torch.Tensor, "*batch"],
 ) -> Bool[torch.Tensor, "*batch max_size"]:
+    """
+    Creates a boolean mask from sequence lengths.
+
+    Args:
+        max_size: Maximum sequence length.
+        sizes: Tensor of actual lengths, shape (*batch,).
+
+    Returns:
+        Mask tensor of shape (*batch, max_size), where mask[b, i] is True if i < sizes[b].
+    """
     mask = torch.arange(max_size, device=sizes.device)
     return torch.lt(mask, sizes.unsqueeze(-1))
 
@@ -85,6 +138,15 @@ def size_to_mask(
 def fixed_size(
     value: Float[torch.Tensor, "*batch max_size"],
 ) -> Int[torch.Tensor, "*batch"]:
+    """
+    Returns the fixed size (last dimension) for each batch entry.
+
+    Args:
+        value: Tensor of shape (*batch, max_size).
+
+    Returns:
+        Tensor of shape (*batch,) filled with max_size.
+    """
     sizes = torch.ones_like(value[..., 0], dtype=torch.long) * value.shape[-1]
     return sizes
 
@@ -97,6 +159,20 @@ def sized_mean(
     size_keepdim: bool = False,
     correction: int = 0,
 ) -> Float[torch.Tensor, "..."]:
+    """
+    Computes the mean over `value` for variable-length sequences.
+
+    Args:
+        value: Tensor of shape (*batch, max_size).
+        sizes: Optional lengths tensor, shape (*batch,).
+        dim: Dimensions to reduce.
+        keepdim: If True, retains reduced dims.
+        size_keepdim: If True, retains size dim.
+        correction: Value to subtract from sizes sum.
+
+    Returns:
+        Tensor of means.
+    """
     value = value * size_to_mask(value.shape[-1], sizes)
     div_val = safe_div(
         value.sum(dim=-1).sum(dim, keepdim=keepdim),
@@ -114,6 +190,19 @@ def masked_mean(
     keepdim: bool = False,
     correction: int = 0,
 ) -> Float[torch.Tensor, "..."]:
+    """
+    Computes the mean of `value` over `dim`, ignoring elements where mask is False.
+
+    Args:
+        value: Input tensor.
+        mask: Boolean mask of same shape as `value`.
+        dim: Dimension(s) to reduce.
+        keepdim: Retain reduced dims if True.
+        correction: Value to subtract from mask sum.
+
+    Returns:
+        Tensor of masked means.
+    """
     return safe_div(
         (value * mask).sum(dim=dim, keepdim=keepdim),
         torch.clamp(mask.float().sum(dim, keepdim=keepdim) - correction, min=0),
@@ -121,6 +210,19 @@ def masked_mean(
 
 
 def unsqueeze_trailing_dims(x: torch.Tensor, shape: torch.Size) -> torch.Tensor:
+    """
+    Unsqueezes `x` at trailing positions to match `shape` dimensions.
+
+    Args:
+        x: Input tensor.
+        shape: Target shape.
+
+    Returns:
+        Reshaped tensor with added dimensions.
+
+    Raises:
+        ValueError: If `x` has more dims than `shape` or mismatched leading dims.
+    """
     if x.ndim > len(shape) or x.shape != shape[: x.ndim]:
         raise ValueError
     dim = (...,) + (None,) * (len(shape) - x.ndim)

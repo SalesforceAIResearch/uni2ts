@@ -22,32 +22,47 @@ from jaxtyping import AbstractDtype, Num
 
 
 class DateTime64(AbstractDtype):
+    """ A custom jaxtyping dtype for numpy.datetime64. """
     dtypes = ["datetime64"]
 
 
 class Character(AbstractDtype):
+    """ A custom jaxtyping dtype for numpy.str_. """
     dtypes = ["str_"]
 
 
 # Data preparation
 GenFunc = Callable[[], Iterable[dict[str, Any]]]
+""" A type alias for a generator function that yields dictionaries. """
 SliceableGenFunc = Callable[..., Iterable[dict[str, Any]]]
+""" A type alias for a sliceable generator function that yields dictionaries. """
 
 
 # Indexer
 DateTime = DateTime64[np.ndarray, ""]
+""" A type alias for a single numpy.datetime64 value. """
 BatchedDateTime = DateTime64[np.ndarray, "batch"]
+""" A type alias for a batch of numpy.datetime64 values. """
 String = np.character
+""" A type alias for a numpy character. """
 BatchedString = Character[np.ndarray, "batch"]
+""" A type alias for a batch of numpy characters. """
 UnivarTimeSeries = Num[np.ndarray, "time"]
+""" A type alias for a univariate time series as a numpy array. """
 MultivarTimeSeries = Num[np.ndarray, "var time"]
+""" A type alias for a multivariate time series as a numpy array. """
 Data = DateTime | String | UnivarTimeSeries | MultivarTimeSeries
+""" A type alias for any of the supported data types. """
 BatchedData = (
     BatchedDateTime | BatchedString | list[UnivarTimeSeries] | list[MultivarTimeSeries]
 )
+""" A type alias for a batch of any of the supported data types. """
 FlattenedData = DateTime | String | list[UnivarTimeSeries]
+""" A type alias for flattened data, which can be a single value or a list of time series. """
 
 
 # Loader
 Sample = dict[str, Num[torch.Tensor, "*sample"]]
+""" A type alias for a single sample, which is a dictionary of tensors. """
 BatchedSample = dict[str, Num[torch.Tensor, "batch *sample"]]
+""" A type alias for a batch of samples, which is a dictionary of batched tensors. """

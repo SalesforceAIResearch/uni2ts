@@ -29,14 +29,16 @@ from ._base import Indexer
 
 class HuggingFaceDatasetIndexer(Indexer):
     """
-    Indexer for Hugging Face Datasets
+    An indexer for Hugging Face datasets. It provides an interface for accessing
+    data from a `datasets.Dataset` object.
+
+    Args:
+        dataset (Dataset): The underlying Hugging Face dataset.
+        uniform (bool, optional): Whether the underlying data has a uniform length.
+            Defaults to False.
     """
 
     def __init__(self, dataset: Dataset, uniform: bool = False):
-        """
-        :param dataset: underlying Hugging Face Dataset
-        :param uniform: whether the underlying data has uniform length
-        """
         super().__init__(uniform=uniform)
         self.dataset = dataset
         self.features = dict(self.dataset.features)
@@ -54,6 +56,9 @@ class HuggingFaceDatasetIndexer(Indexer):
         return len(self.dataset)
 
     def _getitem_int(self, idx: int) -> dict[str, Data]:
+        """
+        Retrieves a single item from the dataset.
+        """
         non_seqs = self.dataset[idx]
         pa_subtable = query_table(self.dataset.data, idx, indices=self.dataset._indices)
         seqs = {
@@ -62,6 +67,9 @@ class HuggingFaceDatasetIndexer(Indexer):
         return non_seqs | seqs
 
     def _getitem_iterable(self, idx: Iterable[int]) -> dict[str, BatchedData]:
+        """
+        Retrieves multiple items from the dataset.
+        """
         non_seqs = self.dataset[idx]
         pa_subtable = query_table(self.dataset.data, idx, indices=self.dataset._indices)
         seqs = {
@@ -70,6 +78,9 @@ class HuggingFaceDatasetIndexer(Indexer):
         return non_seqs | seqs
 
     def _getitem_slice(self, idx: slice) -> dict[str, BatchedData]:
+        """
+        Retrieves a slice of items from the dataset.
+        """
         non_seqs = self.dataset[idx]
         pa_subtable = query_table(self.dataset.data, idx, indices=self.dataset._indices)
         seqs = {
@@ -80,6 +91,9 @@ class HuggingFaceDatasetIndexer(Indexer):
     def _pa_column_to_numpy(
         self, pa_table: pa.Table, column_name: str
     ) -> list[UnivarTimeSeries] | list[MultivarTimeSeries]:
+        """
+        Converts a PyArrow column to a list of NumPy arrays.
+        """
         pa_array: pa.Array = pa_table.column(column_name)
         feature = self.features[column_name]
 
@@ -118,11 +132,16 @@ class HuggingFaceDatasetIndexer(Indexer):
 
     def get_proportional_probabilities(self, field: str = "target") -> np.ndarray:
         """
-        Obtain proportion of each time series based on number of time steps.
-        Leverages pyarrow.compute for fast implementation.
+        Returns a probability distribution over all time series that is proportional
+        to their lengths. This method leverages `pyarrow.compute` for a fast
+        implementation.
 
-        :param field: field name to measure time series length
-        :return: proportional probabilities
+        Args:
+            field (str, optional): The field name to use for measuring time series
+                length. Defaults to "target".
+
+        Returns:
+            np.ndarray: A proportional probability distribution.
         """
 
         if self.uniform:

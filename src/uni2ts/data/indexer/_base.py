@@ -23,25 +23,28 @@ from uni2ts.common.typing import BatchedData, Data
 
 class Indexer(abc.ABC, Sequence):
     """
-    Base class for all Indexers.
+    An abstract base class for all indexers. An indexer is responsible for
+    extracting data from an underlying file format and providing a sequence-like
+    interface to it.
 
-    An Indexer is responsible for extracting data from an underlying file format.
+    Args:
+        uniform (bool, optional): Whether the underlying data has a uniform length.
+            Defaults to False.
     """
 
     def __init__(self, uniform: bool = False):
-        """
-        :param uniform: whether the underlying data has uniform length
-        """
         self.uniform = uniform
 
     def check_index(self, idx: int | slice | Iterable[int]):
         """
-        Check the validity of a given index.
+        Checks the validity of a given index.
 
-        :param idx: index to check
-        :return: None
-        :raises IndexError: if idx is out of bounds
-        :raises NotImplementedError: if idx is not a valid type
+        Args:
+            idx (int | slice | Iterable[int]): The index to check.
+
+        Raises:
+            IndexError: If the index is out of bounds.
+            NotImplementedError: If the index is not a valid type.
         """
         if isinstance(idx, int):
             if idx < 0 or idx >= len(self):
@@ -66,10 +69,13 @@ class Indexer(abc.ABC, Sequence):
         self, idx: int | slice | Iterable[int]
     ) -> dict[str, Data | BatchedData]:
         """
-        Retrive the data from the underlying storage in dictionary format.
+        Retrieves data from the underlying storage in a dictionary format.
 
-        :param idx: index to retrieve
-        :return: underlying data with given index
+        Args:
+            idx (int | slice | Iterable[int]): The index to retrieve.
+
+        Returns:
+            dict[str, Data | BatchedData]: The underlying data at the given index.
         """
         self.check_index(idx)
 
@@ -85,29 +91,46 @@ class Indexer(abc.ABC, Sequence):
         return {k: v for k, v in item.items()}
 
     def _getitem_slice(self, idx: slice) -> dict[str, BatchedData]:
+        """
+        Retrieves a slice of data.
+        """
         indices = list(range(len(self))[idx])
         return self._getitem_iterable(indices)
 
     @abc.abstractmethod
-    def _getitem_int(self, idx: int) -> dict[str, Data]: ...
+    def _getitem_int(self, idx: int) -> dict[str, Data]:
+        """
+        An abstract method for retrieving a single item.
+        """
+        ...
 
     @abc.abstractmethod
-    def _getitem_iterable(self, idx: Iterable[int]) -> dict[str, BatchedData]: ...
+    def _getitem_iterable(self, idx: Iterable[int]) -> dict[str, BatchedData]:
+        """
+        An abstract method for retrieving multiple items.
+        """
+        ...
 
     def get_uniform_probabilities(self) -> np.ndarray:
         """
-        Obtains uniform probability distribution over all time series.
+        Returns a uniform probability distribution over all time series.
 
-        :return: uniform probability distribution
+        Returns:
+            np.ndarray: A uniform probability distribution.
         """
         return np.ones(len(self)) / len(self)
 
     def get_proportional_probabilities(self, field: str = "target") -> np.ndarray:
         """
-        Obtain proportion of each time series based on number of time steps.
+        Returns a probability distribution over all time series that is proportional
+        to their lengths.
 
-        :param field: field name to measure time series length
-        :return: proportional probabilities
+        Args:
+            field (str, optional): The field name to use for measuring time series
+                length. Defaults to "target".
+
+        Returns:
+            np.ndarray: A proportional probability distribution.
         """
         if self.uniform:
             return self.get_uniform_probabilities()

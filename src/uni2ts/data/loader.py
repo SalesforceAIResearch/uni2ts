@@ -31,7 +31,17 @@ from uni2ts.common.typing import BatchedSample, Sample
 @dataclass
 class Collate:
     """
-    A Callable abstract class for PyTorch DataLoader's collate_fn argument.
+    An abstract base class for collate functions, designed to be used with PyTorch's DataLoader.
+    It defines a common interface for padding and packing sequences.
+
+    Args:
+        max_length (Optional[int]): The maximum length to pad or pack sequences to.
+        seq_fields (tuple[str, ...]): A tuple of field names that contain sequence data.
+        pad_func_map (dict[str, Callable[[Sequence[int], np.dtype], np.ndarray]], optional):
+            A dictionary mapping field names to padding functions. Defaults to a dictionary
+            that uses `np.zeros` for all fields.
+        target_field (str, optional): The name of the target field, used to determine the
+            length of sequences. Defaults to "target".
     """
 
     max_length: Optional[int]
@@ -53,9 +63,18 @@ class Collate:
 
 
 class PadCollate(Collate):
-    """Pads uneven sequences with padding function defined by pad_func_map."""
+    """
+    A collate function that pads uneven sequences to a `max_length`. The padding
+    is performed using the functions defined in `pad_func_map`.
+
+    This collate function also creates a `sample_id` tensor that can be used to
+    distinguish between real data and padding.
+    """
 
     def __call__(self, batch: list[Sample]) -> BatchedSample:
+        """
+        Pads a batch of samples and returns a batched sample.
+        """
         assert all(
             [
                 len(sample[self.target_field]) == len(sample[key])
@@ -73,6 +92,9 @@ class PadCollate(Collate):
         return merged_batch
 
     def pad_samples(self, batch: list[Sample]) -> BatchedSample:
+        """
+        Pads each sample in the batch to `max_length`.
+        """
         for sample in batch:
             length = len(sample[self.target_field])
             for key in self.seq_fields:
@@ -101,9 +123,17 @@ class PadCollate(Collate):
 
 
 class PackCollate(Collate):
-    """Packs uneven sequences with the first fit decreasing bin packing strategy."""
+    """
+    A collate function that packs uneven sequences into a smaller number of sequences
+    of `max_length` using the first-fit-decreasing bin packing strategy. This can
+    be more efficient than padding when dealing with sequences of highly variable
+    lengths.
+    """
 
     def __call__(self, batch: list[Sample]) -> BatchedSample:
+        """
+        Packs a batch of samples and returns a batched sample.
+        """
         assert all(
             [
                 len(sample[self.target_field]) == len(sample[key])
@@ -127,16 +157,18 @@ class PackCollate(Collate):
         batch: list[Sample],
     ) -> tuple[list[list[Sample]], Int[np.ndarray, "batch"]]:
         """
-        Implements the first fit decreasing bin packing strategy.
-        1. Sort the batch by sequence length, long to short.
-        2. Initialize an empty list of bins, where each bin has a maximum size of max_length.
-        3. Iterate through the sorted batch, inserting samples into the first bin which,
-        when the sample is added, does not exceed max_length.
+        Implements the first-fit-decreasing bin packing algorithm.
+        1. Sort the batch by sequence length in descending order.
+        2. Initialize a list of bins, each with a capacity of `max_length`.
+        3. Iterate through the sorted batch and place each sample into the first
+           bin that has enough remaining space.
 
-        :param batch: list of samples
-        :return:
-            - packed_batch - batch which has been packed
-            - bin_spaces - length of each bin
+        Args:
+            batch (list[Sample]): A list of samples to pack.
+
+        Returns:
+            tuple[list[list[Sample]], Int[np.ndarray, "..."]]: A tuple containing the
+                packed batch and the remaining space in each bin.
         """
         batch = sorted(
             batch, key=lambda sample: len(sample[self.target_field]), reverse=True
@@ -186,7 +218,9 @@ class PackCollate(Collate):
     def merge_batch(
         self, batch: list[list[Sample]], bin_spaces: Int[np.ndarray, "batch"]
     ) -> BatchedSample:
-        """Combines packed samples into BatchedSample format."""
+        """
+        Merges the packed samples into a single batched sample.
+        """
         batch = {
             key: torch.stack(
                 [
@@ -211,7 +245,12 @@ class PackCollate(Collate):
 
 @dataclass
 class SliceableBatchedSample:
-    """A BatchedSample that can be sliced."""
+    """
+    A wrapper around a `BatchedSample` that allows it to be sliced.
+
+    Args:
+        data (BatchedSample): The batched sample to wrap.
+    """
 
     data: BatchedSample
 
@@ -240,10 +279,16 @@ class Metadata(NamedTuple):
 @dataclass
 class BatchedSampleQueue:
     """
-    Queue data structure storing batched samples.
+    A queue data structure for storing and managing batched samples. It ensures that
+    all samples in the queue have the same schema (i.e., the same keys, shapes,
+    and dtypes).
 
-    :param container: internal queue data structure storing batched samples
-    :param schema: format specification for batched samples
+    Args:
+        container (deque[SliceableBatchedSample], optional): The internal deque to
+            store samples. Defaults to an empty deque.
+        schema (Optional[dict[str, Metadata]], optional): The schema for the samples
+            in the queue. If not provided, it is inferred from the first sample added.
+            Defaults to None.
     """
 
     container: deque[SliceableBatchedSample] = field(default_factory=deque)
@@ -251,8 +296,8 @@ class BatchedSampleQueue:
 
     def _check_schema(self, batch: SliceableBatchedSample):
         """
-        Ensure that all samples in the batch follows the required schema.
-        If a schema has not been specified, then all samples in the batch should have the same schema.
+        Checks if a batch conforms to the queue's schema. If the schema is not yet
+        defined, it is inferred from the batch.
         """
         if self.schema is None:
             self.schema = {
@@ -272,21 +317,27 @@ class BatchedSampleQueue:
             ), "batch must have the same schema as the first batch"
 
     def append(self, batch: SliceableBatchedSample | BatchedSample):
-        """Appends a batch to the end of the queue."""
+        """
+        Appends a batch to the end of the queue.
+        """
         if not isinstance(batch, SliceableBatchedSample):
             batch = SliceableBatchedSample(batch)
         self._check_schema(batch)
         self.container.append(batch)
 
     def appendleft(self, batch: SliceableBatchedSample | BatchedSample):
-        """Appends a batch to the start of the queue."""
+        """
+        Appends a batch to the start of the queue.
+        """
         if not isinstance(batch, SliceableBatchedSample):
             batch = SliceableBatchedSample(batch)
         self._check_schema(batch)
         self.container.appendleft(batch)
 
     def popleft(self, size: int) -> BatchedSample:
-        """Pops a batch from the start of the queue."""
+        """
+        Pops a batch of a given size from the start of the queue.
+        """
         if size > len(self):
             raise ValueError(
                 f"pop size ({size}) must be less than or equal to queue size ({len(self)})"
@@ -302,27 +353,36 @@ class BatchedSampleQueue:
         return out.as_batched_data()
 
     def as_batched_data(self) -> BatchedSample:
-        """Returns the queue as a BatchedSample"""
+        """
+        Returns the contents of the queue as a single `BatchedSample`.
+        """
         return {
             key: torch.cat([batch.data[key] for batch in self.container], dim=0)
             for key in self.schema.keys()
         }
 
     def __len__(self) -> int:
-        """Total number of samples in the queue."""
+        """
+        Returns the total number of samples in the queue.
+        """
         return sum(len(batch) for batch in self.container)
 
 
 @dataclass
 class _BatchedSampleIterator:
     """
-    Iterator returning batched samples with a fixed batch size.
+    An iterator that returns batched samples with a fixed batch size. It wraps another
+    dataloader iterator and uses a queue to buffer samples, ensuring that each
+    batch returned has the specified `batch_size`.
 
-    :param dataloader_iter: iterator returning batched samples, may not be with fixed batch size
-    :param batch_size: the batch size of batched samples to return
-    :param drop_last: whether to drop the last batch of it does not have batch_size samples
-    :param fill_last: whether to fill the last batch with padding if it does not have batch_size samples
-    :param pad_func_map: mapping to padding functions
+    Args:
+        dataloader_iter (Iterator[BatchedSample]): The underlying dataloader iterator.
+        batch_size (int): The desired batch size.
+        drop_last (bool): Whether to drop the last batch if it is smaller than `batch_size`.
+        fill_last (bool): Whether to fill the last batch with padding if it is smaller
+            than `batch_size`.
+        pad_func_map (dict[str, Callable[[Sequence[int], np.dtype], np.ndarray]]):
+            A dictionary mapping field names to padding functions.
     """
 
     dataloader_iter: Iterator[BatchedSample]
@@ -344,8 +404,8 @@ class _BatchedSampleIterator:
 
     def _next_batch(self) -> Optional[BatchedSample]:
         """
-        :return: either None or the next batch of samples
-        :raises StopIteration: if the queue is empty
+        Returns the next batch of samples, or None if more data is needed from the
+        underlying iterator.
         """
         if len(self.queue) < self.batch_size:
             # check if there are sufficient samples in the queue
@@ -366,6 +426,9 @@ class _BatchedSampleIterator:
         return batch
 
     def _pad_queue(self, size: int):
+        """
+        Pads the queue with a given number of padding samples.
+        """
         if self.queue.schema is None:
             raise ValueError("schema must be set before padding")
         padding = {
@@ -377,7 +440,9 @@ class _BatchedSampleIterator:
         self.queue.append(padding)
 
     def has_next(self) -> bool:
-        """Check if iterator still has next."""
+        """
+        Checks if the iterator has more batches.
+        """
         if len(self.queue) < self.batch_size:
             try:
                 next_batch = next(self)
@@ -389,10 +454,30 @@ class _BatchedSampleIterator:
 
 class DataLoader:
     """
-    Wrapper on PyTorch's DataLoader class implementing:
-    - packing
-    - number of batches per epoch
-    - cycle
+    A wrapper around PyTorch's DataLoader that adds support for packing, cycling,
+    and a fixed number of batches per epoch.
+
+    Args:
+        dataset (Dataset): The dataset to load from.
+        batch_size (int): The number of samples per batch.
+        batch_size_factor (float, optional): A factor to multiply the `batch_size` by
+            when creating the underlying PyTorch DataLoader. This is useful when
+            using packing, as the underlying dataloader can have a larger batch size.
+            Defaults to 1.0.
+        cycle (bool, optional): Whether to cycle the dataloader infinitely. Defaults to False.
+        num_batches_per_epoch (Optional[int], optional): The number of batches per epoch.
+            If specified, the dataloader will be cycled. Defaults to None.
+        shuffle (bool, optional): Whether to shuffle the data. Defaults to False.
+        sampler (Optional[Sampler], optional): A sampler to use. Defaults to None.
+        num_workers (int, optional): The number of worker processes to use. Defaults to 0.
+        collate_fn (Optional[Collate], optional): A collate function to use. Defaults to None.
+        pin_memory (bool, optional): Whether to pin memory. Defaults to False.
+        drop_last (bool, optional): Whether to drop the last batch. Defaults to True.
+        fill_last (bool, optional): Whether to fill the last batch with padding. Defaults to False.
+        worker_init_fn (Optional[Callable[[int], None]], optional): A worker init function.
+            Defaults to None.
+        prefetch_factor (int, optional): The prefetch factor. Defaults to 2.
+        persistent_workers (bool, optional): Whether to use persistent workers. Defaults to False.
     """
 
     def __init__(
@@ -465,10 +550,14 @@ class DataLoader:
 
     @property
     def worker_init_fn(self) -> Optional[Callable[[int], None]]:
-        """Getter for worker_init_fn"""
+        """
+        A getter for the `worker_init_fn` of the underlying dataloader.
+        """
         return self.dataloader.worker_init_fn
 
     @worker_init_fn.setter
     def worker_init_fn(self, worker_init_fn: Optional[Callable[[int], None]]):
-        """Setter for worker_init_fn"""
+        """
+        A setter for the `worker_init_fn` of the underlying dataloader.
+        """
         self.dataloader.worker_init_fn = worker_init_fn

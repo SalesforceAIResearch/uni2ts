@@ -21,6 +21,16 @@ from omegaconf import OmegaConf
 
 
 def register_resolver(name: str) -> Callable[[Callable], Callable]:
+    """
+    A decorator for registering a new resolver with OmegaConf.
+
+    Args:
+        name (str): The name to register the resolver with.
+
+    Returns:
+        Callable[[Callable], Callable]: A decorator that takes a resolver function
+                                         and registers it with OmegaConf.
+    """
     def decorator(resolver: Callable) -> Callable:
         OmegaConf.register_new_resolver(name, resolver)
         return resolver
@@ -30,11 +40,31 @@ def register_resolver(name: str) -> Callable[[Callable], Callable]:
 
 @register_resolver("as_tuple")
 def resolve_as_tuple(ls: list) -> tuple:
+    """
+    Resolves a list from a Hydra config as a tuple.
+
+    Args:
+        ls (list): The list to convert.
+
+    Returns:
+        tuple: The converted tuple.
+    """
     return tuple(ls)
 
 
 @register_resolver("cls_getattr")
 def resolve_cls_getattr(cls_name: str, attribute_name: str) -> Any:
+    """
+    Gets an attribute from a class specified by name. This is useful for accessing
+    class-level attributes or methods from a Hydra config.
+
+    Args:
+        cls_name (str): The fully qualified name of the class.
+        attribute_name (str): The name of the attribute to get.
+
+    Returns:
+        Any: The value of the attribute.
+    """
     if cls_name.endswith(".load_from_checkpoint"):
         cls_name = cls_name[: -len(".load_from_checkpoint")]
     cls = get_class(cls_name)
@@ -43,9 +73,29 @@ def resolve_cls_getattr(cls_name: str, attribute_name: str) -> Any:
 
 @register_resolver("floordiv")
 def resolve_floordiv(a: int, b: int) -> int:
+    """
+    Performs floor division.
+
+    Args:
+        a (int): The dividend.
+        b (int): The divisor.
+
+    Returns:
+        int: The result of the floor division.
+    """
     return a // b
 
 
 @register_resolver("mul")
 def resolve_mul(a: float, b: float) -> float:
+    """
+    Performs multiplication.
+
+    Args:
+        a (float): The first number.
+        b (float): The second number.
+
+    Returns:
+        float: The product of the two numbers.
+    """
     return a * b

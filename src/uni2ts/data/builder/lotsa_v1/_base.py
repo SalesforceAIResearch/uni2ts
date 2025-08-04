@@ -32,13 +32,17 @@ from uni2ts.transform import Identity, Transformation
 @abstract_class_property("dataset_list", "dataset_type_map", "dataset_load_func_map")
 class LOTSADatasetBuilder(DatasetBuilder, abc.ABC):
     """
-    Base class for LOTSA dataset builders.
-    LOTSA datasets are backed by Hugging Face datasets, and use the HuggingFaceDatasetIndexer for fast indexing.
+    An abstract base class for LOTSA dataset builders. LOTSA datasets are backed by
+    Hugging Face datasets and use the `HuggingFaceDatasetIndexer` for fast indexing.
 
-    :attribute dataset_list: list of dataset names belonging to the DatasetBuilder class
-    :attribute dataset_type_map: map dataset names to TimeSeriesDataset
-    :attribute dataset_load_func_map: map dataset names to transform_map
-    :attribute uniform: whether all datasets in the dataset_list have uniform series length
+    Attributes:
+        dataset_list (list[str]): A list of dataset names belonging to the builder.
+        dataset_type_map (dict[str, type[TimeSeriesDataset]]): A mapping from dataset
+            names to their corresponding `TimeSeriesDataset` types.
+        dataset_load_func_map (dict[str, Callable[..., TimeSeriesDataset]]): A mapping
+            from dataset names to their corresponding loading functions.
+        uniform (bool): Whether all datasets in the `dataset_list` have a uniform
+            series length.
     """
 
     dataset_list: list[str] = NotImplemented
@@ -54,10 +58,16 @@ class LOTSADatasetBuilder(DatasetBuilder, abc.ABC):
         storage_path: Path = env.LOTSA_V1_PATH,
     ):
         """
-        :param datasets: list of datasets to load
-        :param weight_map: map dataset names to dataset_weight argument for datasets
-        :param sample_time_series: how to sample time series from the datasets
-        :param storage_path: directory to which data is stored
+        Initializes the LOTSADatasetBuilder.
+
+        Args:
+            datasets (list[str]): A list of dataset names to load.
+            weight_map (Optional[dict[str, float]], optional): A mapping from dataset
+                names to dataset weights. Defaults to None.
+            sample_time_series (SampleTimeSeriesType, optional): The time series
+                sampling strategy to use. Defaults to SampleTimeSeriesType.NONE.
+            storage_path (Path, optional): The directory where the data is stored.
+                Defaults to `env.LOTSA_V1_PATH`.
         """
         assert all(
             dataset in self.dataset_list for dataset in datasets
@@ -72,7 +82,14 @@ class LOTSADatasetBuilder(DatasetBuilder, abc.ABC):
         self, transform_map: dict[str | type, Callable[..., Transformation]]
     ) -> Dataset:
         """
-        Loads all datasets in dataset_list
+        Loads all datasets in the `dataset_list`.
+
+        Args:
+            transform_map (dict[str | type, Callable[..., Transformation]]): A dictionary
+                mapping dataset names or types to transformation functions.
+
+        Returns:
+            Dataset: A single dataset or a `ConcatDataset` of multiple datasets.
         """
         datasets = [
             self.dataset_load_func_map[dataset](
@@ -93,12 +110,21 @@ class LOTSADatasetBuilder(DatasetBuilder, abc.ABC):
         dataset: str,
     ) -> Transformation:
         """
-        Retrieves the Transformation for a given dataset from the transform_map, with the following priority:
-        1. dataset name
-        2. dataset type
-        3. falls back to the default transform if a defaultdict is provided
-        4. falls back to a transform named `default` in the map
-        5. falls back to identity transform
+        Retrieves the transformation for a given dataset from the `transform_map`.
+        The priority for retrieving the transformation is as follows:
+        1. By dataset name.
+        2. By dataset type.
+        3. By the default transform in a `defaultdict`.
+        4. By a transform named "default".
+        5. By the `Identity` transform.
+
+        Args:
+            transform_map (dict[str | type, Callable[..., Transformation]]): A dictionary
+                mapping dataset names or types to transformation functions.
+            dataset (str): The name of the dataset.
+
+        Returns:
+            Transformation: The transformation to apply to the dataset.
         """
         if dataset in transform_map:
             transform = transform_map[dataset]

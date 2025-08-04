@@ -26,6 +26,15 @@ from ._base import DistributionOutput
 
 
 class Mixture(Distribution):
+    """
+    A mixture distribution.
+
+    Args:
+        weights (Categorical): A Categorical distribution over the components.
+        components (list[Distribution]): A list of component distributions.
+        validate_args (Optional[bool], optional): Whether to validate the arguments.
+            Defaults to None.
+    """
     arg_constraints = dict()
     has_rsample = False
 
@@ -168,6 +177,13 @@ class Mixture(Distribution):
 
 
 class MixtureOutput(DistributionOutput):
+    """
+    A distribution output for a mixture distribution.
+
+    Args:
+        components (list[DistributionOutput]): A list of distribution outputs for
+            the components of the mixture.
+    """
     distr_cls = Mixture
 
     def __init__(self, components: list[DistributionOutput]):
@@ -178,6 +194,9 @@ class MixtureOutput(DistributionOutput):
         distr_params: PyTree[torch.Tensor, "T"],
         validate_args: Optional[bool] = None,
     ) -> Distribution:
+        """
+        Creates the mixture distribution from the given parameters.
+        """
         return self.distr_cls(
             weights=Categorical(
                 logits=distr_params["weights_logits"], validate_args=validate_args
@@ -193,6 +212,9 @@ class MixtureOutput(DistributionOutput):
 
     @property
     def args_dim(self) -> PyTree[int, "T"]:
+        """
+        Returns a PyTree specifying the dimensionality of each distribution parameter.
+        """
         return dict(
             weights_logits=len(self.components),
             components=[comp.args_dim for comp in self.components],
@@ -200,6 +222,10 @@ class MixtureOutput(DistributionOutput):
 
     @property
     def domain_map(self) -> PyTree[Callable[[torch.Tensor], torch.Tensor], "T"]:
+        """
+        Returns a PyTree of functions that map the unbounded distribution parameters
+        to the valid domain for each parameter.
+        """
         return dict(
             weights_logits=lambda x: x,
             components=[comp.domain_map for comp in self.components],

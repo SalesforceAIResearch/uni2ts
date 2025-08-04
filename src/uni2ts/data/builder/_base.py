@@ -24,13 +24,15 @@ from uni2ts.transform import Transformation
 # TODO: Add __repr__
 class DatasetBuilder(abc.ABC):
     """
-    Base class for DatasetBuilders.
+    An abstract base class for dataset builders. It defines a common interface for
+    building and loading datasets.
     """
 
     @abc.abstractmethod
     def build_dataset(self, *args, **kwargs):
         """
-        Builds the dataset into the required file format.
+        An abstract method for building a dataset. This method should handle the
+        logic for creating a dataset in the required file format.
         """
         ...
 
@@ -39,23 +41,30 @@ class DatasetBuilder(abc.ABC):
         self, transform_map: dict[Any, Callable[..., Transformation]]
     ) -> Dataset:
         """
-        Load the dataset.
+        An abstract method for loading a dataset.
 
-        :param transform_map: a map which returns the required dataset transformations to be applied
-        :return: the dataset ready for training
+        Args:
+            transform_map (dict[Any, Callable[..., Transformation]]): A dictionary
+                mapping keys to transformation functions. This allows for applying
+                different transformations to different parts of the dataset.
+
+        Returns:
+            Dataset: A PyTorch Dataset object ready for training.
         """
         ...
 
 
 class ConcatDatasetBuilder(DatasetBuilder):
     """
-    Concatenates DatasetBuilders such that they can be loaded together.
+    A dataset builder that concatenates multiple `DatasetBuilder` instances. This allows
+    for combining multiple datasets into a single dataset.
+
+    Args:
+        *builders (DatasetBuilder): A variable number of `DatasetBuilder` instances
+            to concatenate.
     """
 
     def __init__(self, *builders: DatasetBuilder):
-        """
-        :param builders: DatasetBuilders to be concatenated together.
-        """
         super().__init__()
         assert len(builders) > 0, "Must provide at least one builder to ConcatBuilder"
         assert all(
@@ -64,6 +73,10 @@ class ConcatDatasetBuilder(DatasetBuilder):
         self.builders: tuple[DatasetBuilder, ...] = builders
 
     def build_dataset(self):
+        """
+        This method is not implemented for `ConcatDatasetBuilder`, as it is intended
+        to combine already built datasets.
+        """
         raise ValueError(
             "Do not use ConcatBuilder to build datasets, build sub datasets individually instead."
         )
@@ -72,10 +85,15 @@ class ConcatDatasetBuilder(DatasetBuilder):
         self, transform_map: dict[Any, Callable[..., Transformation]]
     ) -> ConcatDataset:
         """
-        Loads all builders with ConcatDataset.
+        Loads all the datasets from the builders and concatenates them using
+        `torch.utils.data.ConcatDataset`.
 
-        :param transform_map: a map which returns the required dataset transformations to be applied
-        :return: the dataset ready for training
+        Args:
+            transform_map (dict[Any, Callable[..., Transformation]]): A dictionary
+                mapping keys to transformation functions.
+
+        Returns:
+            ConcatDataset: A concatenated dataset.
         """
         return ConcatDataset(
             [builder.load_dataset(transform_map) for builder in self.builders]

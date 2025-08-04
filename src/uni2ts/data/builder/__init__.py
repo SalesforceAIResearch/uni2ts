@@ -14,8 +14,10 @@
 #  limitations under the License.
 
 from ._base import ConcatDatasetBuilder, DatasetBuilder
+from .financial import FinancialDatasetBuilder
 
 __all__ = [
     "DatasetBuilder",
     "ConcatDatasetBuilder",
+    "FinancialDatasetBuilder",
 ]

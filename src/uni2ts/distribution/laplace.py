@@ -24,6 +24,9 @@ from ._base import DistributionOutput
 
 
 class LaplaceOutput(DistributionOutput):
+    """
+    A distribution output for the Laplace distribution.
+    """
     distr_cls = Laplace
     args_dim = dict(loc=1, scale=1)
 
@@ -33,6 +36,10 @@ class LaplaceOutput(DistributionOutput):
     ) -> PyTree[
         Callable[[Float[torch.Tensor, "*batch 1"]], Float[torch.Tensor, "*batch"]], "T"
     ]:
+        """
+        Returns a PyTree of functions that map the unbounded distribution parameters
+        to the valid domain for each parameter.
+        """
         return dict(loc=self._loc, scale=self._scale)
 
     @staticmethod
@@ -46,6 +53,12 @@ class LaplaceOutput(DistributionOutput):
 
 
 class LaplaceFixedScaleOutput(DistributionOutput):
+    """
+    A distribution output for the Laplace distribution with a fixed scale.
+
+    Args:
+        scale (float, optional): The fixed scale parameter. Defaults to 1e-3.
+    """
     distr_cls = Laplace
     args_dim = dict(loc=1)
 
@@ -58,6 +71,10 @@ class LaplaceFixedScaleOutput(DistributionOutput):
     ) -> PyTree[
         Callable[[Float[torch.Tensor, "*batch 1"]], Float[torch.Tensor, "*batch"]], "T"
     ]:
+        """
+        Returns a PyTree of functions that map the unbounded distribution parameters
+        to the valid domain for each parameter.
+        """
         return dict(loc=self._loc)
 
     @staticmethod
@@ -69,6 +86,9 @@ class LaplaceFixedScaleOutput(DistributionOutput):
         distr_params: PyTree[Float[torch.Tensor, "*batch 1"], "T"],
         validate_args: Optional[bool] = None,
     ) -> Laplace:
+        """
+        Creates the Laplace distribution with a fixed scale.
+        """
         loc = distr_params["loc"]
         distr_params["scale"] = torch.as_tensor(
             self.scale, dtype=loc.dtype, device=loc.device
