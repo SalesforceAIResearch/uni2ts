@@ -1,30 +1,41 @@
-# Active Context: Initial Setup and Planning
+# Active Context: Multivariate OHLCV Forecasting Strategy
 
 ## Current Focus
-The current focus is on configuring the BTC dataset for fine-tuning. We have successfully run a pre-training job with the `lib_city` dataset, which confirms our understanding of the data loading and training pipeline.
+The current focus is on developing a comprehensive strategy for training a Moirai model on multivariate OHLCV (Open, High, Low, Close, Volume) data. We have created a detailed strategy document that outlines the data preparation pipeline, model configuration, training process, and evaluation methodology.
 
 ## Recent Changes
-- Successfully ran a pre-training job using the `lib_city` dataset.
-- Identified the need for a `.env` file and the `LOTSA_V1_PATH` environment variable.
-- Created a data preparation script for the BTC dataset.
-- Created the BTC dataset on disk.
+- Created a comprehensive strategy document (`docs/multivariate_ohlcv_strategy.md`) for training models on multivariate OHLCV data.
+- Reviewed the codebase, focusing on the markdown files in all directories, especially those in `/home/dev/repos/uni2ts/src/uni2ts`.
+- Gained a deep understanding of the Moirai model architecture and its capabilities for multivariate time series forecasting.
+- Identified the key components of the uni2ts framework and how they can be leveraged for financial time series forecasting.
 
 ## Next Steps
-1.  **Explore the existing data preparation script**: Examine `example/prepare_financial_data.py` to understand how the BTC data is currently being processed.
-2.  **Create a custom `DatasetBuilder`**: Create a new Python module, `src/uni2ts/data/builder/financial.py`, containing a `FinancialDatasetBuilder` class that inherits from `datasets.builder.DatasetBuilder`. This class will implement the `_info`, `_split_generators`, and `_generate_examples` methods to load the prepared BTC data from the parquet files.
-3.  **Update `src/uni2ts/data/builder/__init__.py`**: Add `from .financial import FinancialDatasetBuilder` to make the new builder accessible.
-4.  **Create a new data configuration file**: Create `cli/conf/finetune/data/financial_btc_2015.yaml` to define the configuration for the BTC dataset, pointing to the new `DatasetBuilder`.
-5.  **Create a new fine-tuning run configuration file**: Create `cli/conf/finetune/finetune_btc.yaml`, modifying it to use the new data configuration (`financial_btc_2015`) and the `moirai_1.1_R_base` model.
-6.  **Execute the fine-tuning job**: Run `python -m cli.train -cp conf/finetune run_name=btc_finetune model=moirai_1.1_R_base data=financial_btc_2015`.
-7.  **Update the memory bank**: After the experiment, update `progress.md` and `activeContext.md` to document the results.
+1. **Implement the data preparation pipeline**: Create a script to extract OHLCV data from the Parquet data lake, preprocess it, and create a Hugging Face dataset.
+2. **Create a custom `FinancialDatasetBuilder`**: Develop a specialized dataset builder for financial time series data.
+3. **Configure the model for multivariate OHLCV data**: Set up the appropriate patch size, context length, prediction length, and other hyperparameters.
+4. **Execute the training process**: Run the fine-tuning job using the CLI with the appropriate configuration.
+5. **Evaluate the model**: Assess the model's performance using the evaluation utilities and metrics defined in the strategy document.
+6. **Iterate and refine**: Based on the evaluation results, refine the data preparation, model configuration, and training process.
 
 ## Active Decisions
-- **Initial Dataset**: We will start with 1-hour OHLCV data for BTC-USD from the year 2015. This provides a manageable subset for our first iteration.
-- **Model**: We will use the `moirai_1.1_R_base` model as the starting point for fine-tuning.
+- **Data Selection**: We will focus on crypto assets (e.g., BTC, ETH) initially due to their 24/7 trading and cleaner data patterns.
+- **Frequency**: We will use 1h data as a balance between signal granularity and sequence length.
+- **Model Size**: We will start with the `moirai_1.1_R_base` model (91M parameters) for a balance of performance and computational requirements.
+- **Patch Size**: For hourly data, we will use patch sizes of 32 or 64, as recommended in the MOIRAI documentation.
+- **Context and Prediction Length**: For hourly data, we will use a context length of 168-336 hours (1-2 weeks) and a prediction length of 24-48 hours.
+- **Loss Function**: We will use the negative log-likelihood (NLL) loss with a mixture distribution output for probabilistic forecasting.
 
 ## Important Patterns
 - **Memory Bank**: All significant findings, decisions, and progress will be documented in the Memory Bank to ensure project continuity.
 - **Iterative Approach**: We will start with a small, well-defined experiment and gradually increase complexity.
-- **Data Preparation**: The `example/prepare_data.ipynb` notebook provides a clear template for creating Hugging Face datasets from custom data. The key is to create a generator function that yields dictionaries containing the time series data and metadata.
-- **Forecasting Workflow**: The `example/moirai_forecast.ipynb` and `example/moirai_forecast_pandas.ipynb` notebooks demonstrate the end-to-end process of loading a pre-trained model, preparing data, and generating forecasts.
-- **CLI for Training**: The `README.md` and the `cli` directory show that fine-tuning and evaluation are meant to be run from the command line using `python -m cli.train` and `python -m cli.eval` with Hydra for configuration.
+- **Data Preparation**: The strategy document provides a comprehensive pipeline for preparing OHLCV data, including handling missing values, outliers, and feature engineering.
+- **Model Configuration**: The Moirai model's architecture is well-suited for multivariate time series forecasting, with its patchified masked encoder, any-variate attention, and mixture distribution output.
+- **Training Process**: The uni2ts framework provides a streamlined process for training and fine-tuning models, with support for various optimizers, learning rate schedules, and loss functions.
+- **Evaluation Methodology**: The evaluation utilities in the uni2ts framework allow for comprehensive assessment of model performance, with support for various metrics and visualization techniques.
+
+## Learnings and Insights
+- **Multivariate Handling**: The Moirai model's any-variate attention mechanism allows it to handle arbitrary numbers of variates with permutation-equivariance, making it well-suited for multivariate OHLCV data.
+- **Patch Size Selection**: The choice of patch size is critical for performance, with larger patches reducing sequence length and computational cost, but potentially losing temporal detail.
+- **Token Budget**: The token budget calculation (`tokens ≈ (#variates) × ⌈(context + horizon) / patch_size⌉`) is essential for ensuring that the model can handle the desired context and prediction lengths.
+- **Feature Engineering**: Technical indicators, cross-asset features, and market regime indicators can significantly enhance the model's forecasting capabilities.
+- **Probabilistic Forecasting**: The mixture distribution output allows for flexible probabilistic forecasting, capturing different aspects of the data distribution (heavy tails, skewness, etc.).
