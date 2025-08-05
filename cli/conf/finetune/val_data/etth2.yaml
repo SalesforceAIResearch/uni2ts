@@ -1,7 +1,7 @@
 _target_: uni2ts.data.builder.simple.generate_eval_builder
-dataset: ETTh1_eval
-offset: 8640
-eval_length: 2880
+dataset: ETTh2_eval
+offset: 8640  # Same as _lsf_dataset.py
+eval_length: 2880  # Same as _lsf_dataset.py
 prediction_length: ???
 context_length: ???
 patch_size: ???

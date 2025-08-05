@@ -1,0 +1,9 @@
+_target_: uni2ts.data.builder.simple.generate_eval_builder
+dataset: ETTm1_eval
+offset: 34560  # Same as _lsf_dataset.py
+eval_length: 11520  # Same as _lsf_dataset.py
+prediction_length: ???
+context_length: ???
+patch_size: ???
+mode: ???
+distance: 25  # 6h 15min

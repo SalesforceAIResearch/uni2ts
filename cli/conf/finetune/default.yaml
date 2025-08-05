@@ -1,11 +1,12 @@
 hydra:
   run:
-    dir: outputs/finetune/${hydra:runtime.choices.model}/${hydra:runtime.choices.data}/${run_name}
+    dir: outputs/finetune/${exp_name}/${hydra:runtime.choices.model}/${model.finetune_pattern}/${hydra:runtime.choices.data}/${run_name}
 defaults:
   - model: ???
   - data: ???
   - val_data: null
   - _self_
+exp_name: ???
 run_name: ???
 seed: 0
 tf32: true
@@ -32,6 +33,7 @@ trainer:
       mode: min
       save_top_k: 1
       every_n_epochs: 1
+      save_last: false
     - _target_: lightning.pytorch.callbacks.EarlyStopping
       monitor: val/PackedNLLLoss
       min_delta: 0.0
@@ -39,24 +41,19 @@ trainer:
       mode: min
       strict: false
       verbose: true
-  max_epochs: 100
+  max_epochs: 200
   enable_progress_bar: true
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
   gradient_clip_algorithm: norm
 train_dataloader:
   _target_: uni2ts.data.loader.DataLoader
-  batch_size: 128
+  batch_size: 512  # Since sequence packing is not used, one can use a large batch size when mode='S'
   batch_size_factor: 2.0
-  cycle: true
-  num_batches_per_epoch: 100
+  cycle: false  # Set it as false to loop over all batches per epoch
+  num_batches_per_epoch: null
   shuffle: true
   num_workers: 11
-  collate_fn:
-    _target_: uni2ts.data.loader.PackCollate
-    max_length: ${model.module_kwargs.max_seq_len}
-    seq_fields: ${cls_getattr:${model._target_},seq_fields}
-    pad_func_map: ${cls_getattr:${model._target_},pad_func_map}
   pin_memory: true
   drop_last: false
   fill_last: false
@@ -71,14 +68,9 @@ val_dataloader:
   num_batches_per_epoch: null
   shuffle: false
   num_workers: 11
-  collate_fn:
-    _target_: uni2ts.data.loader.PackCollate
-    max_length: ${model.module_kwargs.max_seq_len}
-    seq_fields: ${cls_getattr:${model._target_},seq_fields}
-    pad_func_map: ${cls_getattr:${model._target_},pad_func_map}
   pin_memory: false
   drop_last: false
-  fill_last: true
+  fill_last: false
   worker_init_fn: null
   prefetch_factor: 2
   persistent_workers: true
