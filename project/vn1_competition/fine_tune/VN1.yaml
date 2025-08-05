@@ -1,0 +1,3 @@
+_target_: uni2ts.data.builder.simple.SimpleDatasetBuilder
+dataset: train_dataset
+weight: 1

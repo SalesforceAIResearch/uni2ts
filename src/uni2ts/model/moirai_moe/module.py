@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 from functools import partial
+from typing import Any, Mapping, Sequence
 
 import torch
 import torch.nn.functional as F
@@ -54,8 +55,27 @@ def encode_distr_output(
     return _encode(distr_output)
 
 
-def decode_distr_output(config: dict[str, str | float | int]) -> DistributionOutput:
-    """Deserialization function for DistributionOutput"""
+SAFE_MODULE_PREFIXES = [
+    "uni2ts.distribution.",
+]
+
+
+def safe_target_check(obj: Any):
+    if isinstance(obj, Mapping):
+        if "_target_" in obj:
+            target = obj["_target_"]
+            if not any(target.startswith(prefix) for prefix in SAFE_MODULE_PREFIXES):
+                raise ValueError(f"Unsafe _target_ in distr_output config: {target!r}")
+        for v in obj.values():
+            safe_target_check(v)
+
+    elif isinstance(obj, Sequence) and not isinstance(obj, (str, bytes)):
+        for v in obj:
+            safe_target_check(v)
+
+
+def decode_distr_output(config: dict) -> DistributionOutput:
+    safe_target_check(config)
     return instantiate(config, _convert_="all")
 
 

@@ -1,0 +1,10 @@
+_target_: uni2ts.data.builder.ConcatDatasetBuilder
+_args_:
+  _target_: uni2ts.data.builder.simple.generate_eval_builders
+  dataset: val_dataset
+  offset: 97
+  eval_length: 16
+  prediction_lengths: [13]
+  context_lengths: [65]
+  patch_sizes: [8,16]
+

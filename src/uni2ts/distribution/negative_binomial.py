@@ -111,12 +111,12 @@ class NegativeBinomialOutput(DistributionOutput):
 
     @staticmethod
     def _total_count(
-        total_count: Float[torch.Tensor, "*batch 1"]
+        total_count: Float[torch.Tensor, "*batch 1"],
     ) -> Float[torch.Tensor, "*batch"]:
         return F.softplus(total_count).squeeze(-1)
 
     @staticmethod
     def _logits(
-        logits: Float[torch.Tensor, "*batch 1"]
+        logits: Float[torch.Tensor, "*batch 1"],
     ) -> Float[torch.Tensor, "*batch"]:
         return logits.squeeze(-1)

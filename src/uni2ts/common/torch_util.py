@@ -35,7 +35,7 @@ numpy_to_torch_dtype_dict = {
 
 
 def packed_attention_mask(
-    sample_id: Int[torch.Tensor, "*batch seq_len"]
+    sample_id: Int[torch.Tensor, "*batch seq_len"],
 ) -> Bool[torch.Tensor, "*batch seq_len seq_len"]:
     sample_id = sample_id.unsqueeze(-1)
     attention_mask = sample_id.eq(sample_id.mT)
@@ -83,7 +83,7 @@ def size_to_mask(
 
 
 def fixed_size(
-    value: Float[torch.Tensor, "*batch max_size"]
+    value: Float[torch.Tensor, "*batch max_size"],
 ) -> Int[torch.Tensor, "*batch"]:
     sizes = torch.ones_like(value[..., 0], dtype=torch.long) * value.shape[-1]
     return sizes
