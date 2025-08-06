@@ -13,19 +13,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-import math
 from functools import partial
-
 import torch
 import torch.nn.functional as F
 from huggingface_hub import PyTorchModelHubMixin
-from hydra.utils import instantiate
 from jaxtyping import Bool, Float, Int
 from torch import nn
-from torch.utils._pytree import tree_map
+
 
 from uni2ts.common.torch_util import packed_causal_attention_mask
-from uni2ts.distribution import DistributionOutput
 from uni2ts.module.norm import RMSNorm
 from uni2ts.module.packed_scaler import PackedNOPScaler, PackedStdScaler
 from uni2ts.module.position import (
@@ -37,7 +33,7 @@ from uni2ts.module.transformer import TransformerEncoder
 from uni2ts.module.ts_embed import ResidualBlock
 
 
-class MoiraiDecoderQuantileModule(
+class Moirai2Module(
     nn.Module,
     PyTorchModelHubMixin,
 ):

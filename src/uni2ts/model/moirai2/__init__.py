@@ -13,10 +13,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from .forecast import MoiraiDecoderQuantileForecast
-from .module import MoiraiDecoderQuantileModule
+from .forecast import Moirai2Forecast
+from .module import Moirai2Module
 
 __all__ = [
-    "MoiraiDecoderQuantileForecast",
-    "MoiraiDecoderQuantileModule",
+    "Moirai2Forecast",
+    "Moirai2Module",
 ]

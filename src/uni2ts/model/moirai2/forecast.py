@@ -39,10 +39,10 @@ from jaxtyping import Bool, Float, Int
 
 from uni2ts.transform.imputation import CausalMeanImputation
 
-from .module import MoiraiDecoderQuantileModule
+from .module import Moirai2Module
 
 
-class MoiraiDecoderQuantileForecast(L.LightningModule):
+class Moirai2Forecast(L.LightningModule):
     def __init__(
         self,
         prediction_length: int,
@@ -51,7 +51,7 @@ class MoiraiDecoderQuantileForecast(L.LightningModule):
         past_feat_dynamic_real_dim: int,
         context_length: int,
         module_kwargs: Optional[dict[str, Any]] = None,
-        module: Optional[MoiraiDecoderQuantileModule] = None,
+        module: Optional[Moirai2Module] = None,
     ):
         assert (module is not None) or (
             module_kwargs is not None
@@ -64,7 +64,7 @@ class MoiraiDecoderQuantileForecast(L.LightningModule):
         super().__init__()
         self.save_hyperparameters(ignore=["module"])
         self.module = (
-            MoiraiDecoderQuantileModule(**module_kwargs) if module is None else module
+            Moirai2Module(**module_kwargs) if module is None else module
         )
         self.module.eval()
 
@@ -77,7 +77,7 @@ class MoiraiDecoderQuantileForecast(L.LightningModule):
         past_feat_dynamic_real_dim: Optional[int] = None,
         context_length: Optional[int] = None,
         patch_size: Optional[int | str] = None,
-    ) -> Generator["MoiraiDecoderQuantileForecast", None, None]:
+    ) -> Generator["Moirai2Forecast", None, None]:
         kwargs = {
             "prediction_length": prediction_length,
             "target_dim": target_dim,
