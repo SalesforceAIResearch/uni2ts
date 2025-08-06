@@ -62,11 +62,50 @@ class LastValueImputation(ImputationMethod):
         return x.T
 
 
+@dataclass(frozen=True)
 class CausalMeanImputation(ImputationMethod):
-    # TODO: implement causal mean imputation
+    """
+    This class replaces each missing value with the average of all the values
+    up to this point, ensuring causality.
+
+    - If the first values are missing, they are replaced by the closest non-missing value.
+    - If an entire sequence is NaN, it is replaced by a predefined value.
+    """
+
+    value: int | float | complex = 0.0
+
     def __call__(
         self, x: Num[np.ndarray, "length *dim"], value: int | float | complex = 0.0
-    ) -> Num[np.ndarray, "length *dim"]: ...
+    ) -> Num[np.ndarray, "length *dim"]:
+        mask = np.isnan(x).T
+
+        # do last value imputation first
+        last_value_imputation = LastValueImputation(self.value)
+        x = last_value_imputation(x)
+        mask[0] = False
+        x = x.T
+
+        if x.ndim == 1:
+            adjusted_values_to_causality = np.concatenate((np.repeat(0.0, 1), x[:-1]))
+            cumsum = np.cumsum(adjusted_values_to_causality)
+            indices = np.linspace(0, len(x) - 1, len(x))
+            indices[0] = 1
+            ar_res = cumsum / indices
+            x[mask] = ar_res[mask]
+        else:
+            # compute cumulative sum
+            adjusted_values_to_causality = np.vstack(
+                (np.zeros((1, x.shape[1])), x[:-1, :])
+            )
+            cumsum = np.cumsum(adjusted_values_to_causality, axis=0)
+
+            # compute causal mean
+            indices = np.linspace(0, len(x) - 1, len(x)).reshape(-1, 1)
+            indices[0] = 1
+            ar_res = cumsum / indices
+            # impute with causal mean
+            x[mask] = ar_res[mask]
+        return x.T
 
 
 @dataclass

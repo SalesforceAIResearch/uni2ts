@@ -15,6 +15,8 @@ Uni2TS is a PyTorch based library for research and applications related to Time 
 Related reading: [Moirai Paper](https://arxiv.org/abs/2402.02592), [Moirai Salesforce Blog](https://blog.salesforceairesearch.com/moirai/), [Moirai-MoE Paper](https://arxiv.org/abs/2410.10469), [Moirai-MoE Salesforce Blog](https://www.salesforce.com/blog/time-series-morai-moe/), [Moirai-MoE AI Horizon Forecast Blog](https://aihorizonforecast.substack.com/p/moirai-moe-upgrading-moirai-with), [Moirai-MoE Jiqizhixin Blog](https://mp.weixin.qq.com/s/LQvlgxx9vU965Yzy6RuBfQ).
 ## 🎉 What's New
 
+* Aug 2025: Enhanced the fine-tuning module and added [examples](./project/moirai-1/finetune_lsf) for running on LSF benchmark.
+
 * Nov 2024: The first general time series forecasting benchmark [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval) is released. [Leaderboard](https://huggingface.co/spaces/Salesforce/GIFT-Eval) is available and please try your model on it!
 
 * Oct 2024: A new model Moirai-MoE! The preprint is available on [arXiv](https://arxiv.org/abs/2410.10469), along with the model weights of [Moirai-MoE-Small](https://huggingface.co/Salesforce/moirai-moe-1.0-R-small) and [Moirai-MoE-Base](https://huggingface.co/Salesforce/moirai-moe-1.0-R-base). Getting started with [inference code](https://github.com/SalesforceAIResearch/uni2ts/tree/main/project/moirai-moe-1) and [notebook examples](https://github.com/SalesforceAIResearch/uni2ts/tree/main/example)!
