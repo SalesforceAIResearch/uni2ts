@@ -56,9 +56,9 @@ class Moirai2Forecast(L.LightningModule):
         assert (module is not None) or (
             module_kwargs is not None
         ), "if module is not provided, module_kwargs is required"
-        if "attn_dropout_p" in module_kwargs:
+        if module_kwargs and "attn_dropout_p" in module_kwargs:
             module_kwargs["attn_dropout_p"] = 0
-        if "dropout_p" in module_kwargs:
+        if module_kwargs and "dropout_p" in module_kwargs:
             module_kwargs["dropout_p"] = 0
 
         super().__init__()
