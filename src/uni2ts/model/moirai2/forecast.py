@@ -63,9 +63,7 @@ class Moirai2Forecast(L.LightningModule):
 
         super().__init__()
         self.save_hyperparameters(ignore=["module"])
-        self.module = (
-            Moirai2Module(**module_kwargs) if module is None else module
-        )
+        self.module = Moirai2Module(**module_kwargs) if module is None else module
         self.module.eval()
 
     @contextmanager

@@ -14,12 +14,12 @@
 #  limitations under the License.
 
 from functools import partial
+
 import torch
 import torch.nn.functional as F
 from huggingface_hub import PyTorchModelHubMixin
 from jaxtyping import Bool, Float, Int
 from torch import nn
-
 
 from uni2ts.common.torch_util import packed_causal_attention_mask
 from uni2ts.module.norm import RMSNorm
