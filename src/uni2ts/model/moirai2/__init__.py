@@ -13,4 +13,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-__version__ = "2.0.0"
+from .forecast import Moirai2Forecast
+from .module import Moirai2Module
+
+__all__ = [
+    "Moirai2Forecast",
+    "Moirai2Module",
+]
