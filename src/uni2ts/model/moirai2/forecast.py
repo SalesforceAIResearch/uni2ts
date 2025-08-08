@@ -74,7 +74,6 @@ class Moirai2Forecast(L.LightningModule):
         feat_dynamic_real_dim: Optional[int] = None,
         past_feat_dynamic_real_dim: Optional[int] = None,
         context_length: Optional[int] = None,
-        patch_size: Optional[int | str] = None,
     ) -> Generator["Moirai2Forecast", None, None]:
         kwargs = {
             "prediction_length": prediction_length,
