@@ -15,6 +15,8 @@ Uni2TS is a PyTorch based library for research and applications related to Time 
 Related reading: [Moirai Paper](https://arxiv.org/abs/2402.02592), [Moirai Salesforce Blog](https://blog.salesforceairesearch.com/moirai/), [Moirai-MoE Paper](https://arxiv.org/abs/2410.10469), [Moirai-MoE Salesforce Blog](https://www.salesforce.com/blog/time-series-morai-moe/), [Moirai-MoE AI Horizon Forecast Blog](https://aihorizonforecast.substack.com/p/moirai-moe-upgrading-moirai-with), [Moirai-MoE Jiqizhixin Blog](https://mp.weixin.qq.com/s/LQvlgxx9vU965Yzy6RuBfQ).
 ## 🎉 What's New
 
+* Aug 2025: Released [Moirai-2.0-R-small](https://huggingface.co/Salesforce/moirai-2.0-R-small).
+
 * Aug 2025: Enhanced the fine-tuning module and added [examples](./project/moirai-1/finetune_lsf) for running on LSF benchmark.
 
 * Nov 2024: The first general time series forecasting benchmark [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval) is released. [Leaderboard](https://huggingface.co/spaces/Salesforce/GIFT-Eval) is available and please try your model on it!
@@ -76,7 +78,7 @@ from uni2ts.eval_util.plot import plot_single
 from uni2ts.model.moirai import MoiraiForecast, MoiraiModule
 from uni2ts.model.moirai_moe import MoiraiMoEForecast, MoiraiMoEModule
 
-MODEL = "moirai-moe"  # model name: choose from {'moirai', 'moirai-moe'}
+MODEL = "moirai2"  # model name: choose from {'moirai', 'moirai-moe', 'moirai2'}
 SIZE = "small"  # model size: choose from {'small', 'base', 'large'}
 PDT = 20  # prediction length: any positive integer
 CTX = 200  # context length: any positive integer
@@ -128,6 +130,17 @@ elif MODEL == "moirai-moe":
         target_dim=1,
         feat_dynamic_real_dim=ds.num_feat_dynamic_real,
         past_feat_dynamic_real_dim=ds.num_past_feat_dynamic_real,
+    )
+elif MODEL == "moirai2":
+    model = Moirai2Forecast(
+        module=Moirai2Module.from_pretrained(
+            f"Salesforce/moirai-2.0-R-small",
+        ),
+        prediction_length=100,
+        context_length=1680,
+        target_dim=1,
+        feat_dynamic_real_dim=0,
+        past_feat_dynamic_real_dim=0,
     )
 
 predictor = model.create_predictor(batch_size=BSZ)
