@@ -1,0 +1,48 @@
+{
+  "builder_name": "generator",
+  "citation": "",
+  "config_name": "default",
+  "dataset_name": "ETTh1_eval",
+  "dataset_size": 487949,
+  "description": "",
+  "download_checksums": {},
+  "download_size": 0,
+  "features": {
+    "item_id": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "start": {
+      "dtype": "timestamp[s]",
+      "_type": "Value"
+    },
+    "freq": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "target": {
+      "feature": {
+        "dtype": "float32",
+        "_type": "Value"
+      },
+      "_type": "Sequence"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 487949,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 487949,
+      "num_examples": 7,
+      "dataset_name": "generator"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}

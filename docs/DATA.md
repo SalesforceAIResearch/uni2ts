@@ -1,4 +1,4 @@
-# OHLCV Parquet Lake
+# Data: OHLCV Parquet Lake
 
 Columnar, hive-partitioned Parquet dataset for intraday and daily OHLCV across multiple asset classes. Optimized for local analytics with DuckDB and Polars. No server involved.
 
@@ -15,7 +15,7 @@ year=YYYY/
 month=MM/
 part.parquet
 
-````
+```
 
 Partition folders are hive-style. Engines expose `asset_class`, `freq`, `symbol`, `year`, `month` as virtual columns.
 

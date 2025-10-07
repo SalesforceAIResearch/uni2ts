@@ -1,0 +1,52 @@
+{
+  "builder_name": "generator",
+  "citation": "",
+  "config_name": "default",
+  "dataset_name": "financial_btc_2015_2020",
+  "dataset_size": 1051841,
+  "description": "",
+  "download_checksums": {},
+  "download_size": 0,
+  "features": {
+    "target": {
+      "feature": {
+        "feature": {
+          "dtype": "float32",
+          "_type": "Value"
+        },
+        "_type": "Sequence"
+      },
+      "length": 5,
+      "_type": "Sequence"
+    },
+    "start": {
+      "dtype": "timestamp[s]",
+      "_type": "Value"
+    },
+    "freq": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "item_id": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 1051841,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 1051841,
+      "num_examples": 1,
+      "dataset_name": "generator"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}

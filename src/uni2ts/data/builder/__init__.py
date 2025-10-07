@@ -15,9 +15,13 @@
 
 from ._base import ConcatDatasetBuilder, DatasetBuilder
 from .financial import FinancialDatasetBuilder
+from .custom_financial_builder import IterativeFinancialDatasetBuilder
+from .simple import SimpleDatasetBuilder
 
 __all__ = [
     "DatasetBuilder",
     "ConcatDatasetBuilder",
     "FinancialDatasetBuilder",
+    "IterativeFinancialDatasetBuilder",
+    "SimpleDatasetBuilder",
 ]

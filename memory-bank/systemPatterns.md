@@ -1,4 +1,4 @@
-# System Patterns: Uni2TS Fine-Tuning for Multivariate OHLCV Data
+# System Patterns: Uni2TS Pre-training and Fine-Tuning for Multivariate OHLCV Data
 
 ## Architecture
 The system follows a modular architecture centered around the `uni2ts` library, Hydra for configuration, and PyTorch Lightning for training.
@@ -7,6 +7,7 @@ The system follows a modular architecture centered around the `uni2ts` library, 
   - Financial data is stored in a Parquet data lake with a hive-style partitioning scheme.
   - A comprehensive data preparation pipeline handles extraction, preprocessing, feature engineering, and dataset creation.
   - The pipeline is designed to handle multivariate OHLCV data, with support for technical indicators, cross-asset features, and market regime indicators.
+  - A custom `IterativeFinancialDatasetBuilder` processes large financial datasets iteratively, one asset at a time, to avoid loading the entire dataset into memory at once.
 
 - **Configuration Layer**: 
   - Hydra is used to manage all configurations.
@@ -17,6 +18,7 @@ The system follows a modular architecture centered around the `uni2ts` library, 
   - The core model is a pre-trained Moirai transformer from the `uni2ts` library.
   - The model architecture includes a patchified masked encoder, any-variate attention, and mixture distribution output.
   - The model is configured for multivariate time series forecasting, with appropriate patch size, context length, and prediction length.
+  - Pre-training on a large, diverse dataset of financial time series data enhances the model's performance on downstream tasks.
 
 - **Training Layer**: 
   - PyTorch Lightning handles the training loop, including optimization, checkpointing, and logging.
@@ -29,6 +31,12 @@ The system follows a modular architecture centered around the `uni2ts` library, 
   - Visualization tools create plots of forecasts with confidence intervals.
 
 ## Key Technical Decisions
+
+- **Iterative Data Processing**:
+  - The custom `IterativeFinancialDatasetBuilder` processes data iteratively, one asset at a time, to avoid loading the entire dataset into memory at once.
+  - Assets are processed in batches, with a default batch size of 10, to manage memory usage and enable processing of very large datasets.
+  - Temporary storage is used for processed data, with automatic cleanup after each batch to manage disk space.
+  - This approach allows for pre-training on datasets that would otherwise be too large to process at once.
 
 - **Multivariate Data Handling**:
   - The Moirai model's any-variate attention mechanism allows it to handle arbitrary numbers of variates with permutation-equivariance.
@@ -74,6 +82,7 @@ graph TD
     E --> J[Trained Model];
     J --> K[Evaluation];
     K --> L[Metrics & Visualizations];
+    M[Iterative Financial Dataset Builder] --> D;
 
     subgraph Configuration [Hydra]
         F
@@ -106,6 +115,14 @@ graph TD
         K2 -.-> K
         K3 -.-> K
     end
+
+    subgraph Iterative Processing
+        M1[Asset Batch Processing] --> M2[Temporary Storage];
+        M2 --> M3[Cleanup];
+        M1 -.-> M
+        M2 -.-> M
+        M3 -.-> M
+    end
 ```
 
 ## Critical Implementation Paths
@@ -115,6 +132,14 @@ graph TD
 2. **Preprocessing**: Handle missing values, outliers, and apply normalization.
 3. **Feature Engineering**: Add technical indicators, cross-asset features, and market regime indicators.
 4. **Dataset Creation**: Create a Hugging Face dataset with the appropriate schema for uni2ts.
+5. **Iterative Processing**: Process assets in batches, using temporary storage and automatic cleanup to manage memory and disk space.
+
+### Pre-training Path
+1. **Dataset Builder Configuration**: Configure the `IterativeFinancialDatasetBuilder` with appropriate parameters (data path, batch size, asset class, frequency, years, symbols).
+2. **Model Configuration**: Configure the Moirai model for pre-training, with appropriate patch sizes, mask ratios, and distribution output.
+3. **Training Configuration**: Set up the training process with appropriate batch size, number of epochs, learning rate, and other hyperparameters.
+4. **Pre-training Execution**: Run the pre-training process using the CLI with the appropriate configuration.
+5. **Monitoring and Evaluation**: Monitor the pre-training process using TensorBoard and evaluate the pre-trained model on downstream tasks.
 
 ### Model Configuration Path
 1. **Patch Size Selection**: Choose appropriate patch sizes based on data frequency.
