@@ -1,0 +1,23 @@
+{
+    "python_sandbox": "http://localhost:8080",
+    "moirai": {
+        "HOST_ADDR": "127.0.0.1",
+        "HOST_PORT": 2222,
+        "APP_NAME": "moirai_v2"
+    },
+    "tirex": {
+        "HOST_ADDR": "127.0.0.1",
+        "HOST_PORT": 7777,
+        "APP_NAME": "tirex"
+    },
+    "timesfm": {
+        "HOST_ADDR": "127.0.0.1",
+        "HOST_PORT": 8888,
+        "APP_NAME": "timesfm"
+    },
+    "chronos_v2": {
+        "HOST_ADDR": "127.0.0.1",
+        "HOST_PORT": 9999,
+        "APP_NAME": "chronos_v2"
+    }
+}
