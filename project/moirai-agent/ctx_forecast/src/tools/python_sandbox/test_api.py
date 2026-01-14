@@ -3,13 +3,15 @@
 Test script to call the Python sandbox API and execute matrix multiplication.
 """
 
-import requests
 import json
 import sys
 import time
 
+import requests
+
 # Default server URL
 DEFAULT_URL = "http://localhost:8080"
+
 
 def test_health(url: str):
     """Test the health endpoint"""
@@ -28,12 +30,13 @@ def test_health(url: str):
         print(f"❌ Health check failed: {e}")
         return False
 
+
 def test_matrix_multiplication(url: str):
     """Test matrix multiplication via API"""
     print("\n" + "=" * 60)
     print("Testing Matrix Multiplication via API")
     print("=" * 60)
-    
+
     # Matrix multiplication code with return value
     code = """
 import numpy as np
@@ -110,38 +113,35 @@ print("\\n" + "=" * 60)
 print("All tests completed!")
 print("=" * 60)
 """
-    
-    payload = {
-        "code": code,
-        "timeout": 300
-    }
-    
+
+    payload = {"code": code, "timeout": 300}
+
     try:
         print("\nSending request to server...")
         start_time = time.time()
         response = requests.post(
             f"{url}/execute",
             json=payload,
-            timeout=320  # Slightly longer than code timeout
+            timeout=320,  # Slightly longer than code timeout
         )
         elapsed_time = time.time() - start_time
-        
+
         response.raise_for_status()
         result = response.json()
-        
+
         print(f"\n✅ Request completed in {elapsed_time:.2f} seconds")
         print(f"Success: {result.get('success')}")
         print(f"Exit code: {result.get('exit_code')}")
-        
-        if result.get('success'):
+
+        if result.get("success"):
             print("\n" + "-" * 60)
             print("Output:")
             print("-" * 60)
-            print(result.get('output', ''))
+            print(result.get("output", ""))
             print("-" * 60)
-            
+
             # Display return value if present
-            return_value = result.get('return_value')
+            return_value = result.get("return_value")
             if return_value is not None:
                 print("\n" + "-" * 60)
                 print("Return Value:")
@@ -155,29 +155,30 @@ print("=" * 60)
             print("\n" + "-" * 60)
             print("Error:")
             print("-" * 60)
-            print(result.get('error', ''))
+            print(result.get("error", ""))
             print("-" * 60)
             return False
-        
+
         return True
-        
+
     except requests.exceptions.RequestException as e:
         print(f"\n❌ Request failed: {e}")
         return False
 
+
 def main():
     """Main function"""
     url = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_URL
-    
+
     print(f"Testing Python Sandbox API at: {url}")
     print()
-    
+
     # Test health
     if not test_health(url):
         print("\n❌ Health check failed. Is the server running?")
         print("Start the server with: ./start_background.sh")
         sys.exit(1)
-    
+
     # Test matrix multiplication
     if test_matrix_multiplication(url):
         print("\n✅ All tests passed!")
@@ -186,6 +187,6 @@ def main():
         print("\n❌ Matrix multiplication test failed!")
         sys.exit(1)
 
+
 if __name__ == "__main__":
     main()
-

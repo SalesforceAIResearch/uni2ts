@@ -1,6 +1,7 @@
 import importlib.util
 
-def import_config(config_path, attr_name='CONFIG'):
+
+def import_config(config_path, attr_name="CONFIG"):
     spec = importlib.util.spec_from_file_location("config_module", config_path)
     config_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(config_module)

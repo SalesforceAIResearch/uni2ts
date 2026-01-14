@@ -9,17 +9,30 @@ import numpy as np
 import pandas as pd
 from datasets import load_dataset
 from dotenv import load_dotenv
-from gluonts.ev.metrics import (MAE, MAPE, MASE, MSE, MSIS, ND, NRMSE, RMSE,
-                                SMAPE, MeanWeightedSumQuantileLoss)
+from gift_eval import Dataset
+from gluonts.ev.metrics import (
+    MAE,
+    MAPE,
+    MASE,
+    MSE,
+    MSIS,
+    ND,
+    NRMSE,
+    RMSE,
+    SMAPE,
+    MeanWeightedSumQuantileLoss,
+)
 from gluonts.model.evaluation import evaluate_forecasts
 from gluonts.model.forecast import QuantileForecast
 from gluonts.time_feature import get_seasonality
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
-from gift_eval import Dataset
-from tsf_models import (get_chronos_forecast_fn, get_moirai_forecast_fn,
-                        get_timesfm_forecast_fn, get_tirex_forecast_fn)
+from tsf_models import (
+    get_chronos_forecast_fn,
+    get_moirai_forecast_fn,
+    get_timesfm_forecast_fn,
+    get_tirex_forecast_fn,
+)
 
 logging.getLogger("gluonts.model.predictor").setLevel(logging.ERROR)
 logging.getLogger("gluonts.model.forecast").setLevel(logging.ERROR)
@@ -491,7 +504,9 @@ class MoiraiAgentTimeSeriesForecast:
             max_future_length=40, max_history_future_ratio=10
         )
         self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_repo_id)
-        self.llm_model = AutoModelForCausalLM.from_pretrained(llm_repo_id, dtype="auto", device_map="auto")
+        self.llm_model = AutoModelForCausalLM.from_pretrained(
+            llm_repo_id, dtype="auto", device_map="auto"
+        )
 
     def __call__(self, time_series_data):
         candidate_preds = self.time_series_forecasters.get_forecasts(
@@ -532,9 +547,7 @@ class MoiraiAgentTimeSeriesForecast:
                 ],
                 skip_special_tokens=True,
             )[0]
-            response = self.preprocessor.parse_answer(
-                response, self.model_names
-            )
+            response = self.preprocessor.parse_answer(response, self.model_names)
 
         final_pred = self.time_series_forecasters.get_best_pred(
             response,

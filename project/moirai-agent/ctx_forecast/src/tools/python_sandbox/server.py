@@ -5,16 +5,17 @@ This server creates temporary directories for each execution and cleans them up.
 """
 
 import asyncio
-import os
-import sys
-import subprocess
-import tempfile
-import shutil
 import json
 import logging
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
+
 from aiohttp import web
 
 # Configure logging
@@ -41,18 +42,18 @@ def _run_subprocess_sync(code_file: str, temp_dir: str, timeout: int) -> Dict[st
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            universal_newlines=True
+            universal_newlines=True,
         )
-        
+
         try:
             # Wait for process with timeout
             stdout, stderr = process.communicate(timeout=timeout)
             exit_code = process.returncode
-            
+
             # Extract return value from stderr if present
             return_value = None
             stderr_output = stderr or ""
-            
+
             if stderr:
                 # Look for return value marker
                 if "=== RETURN VALUE ===" in stderr:
@@ -72,19 +73,22 @@ def _run_subprocess_sync(code_file: str, temp_dir: str, timeout: int) -> Dict[st
                                     return_value = return_value_str
                         # Remove return value marker and value from stderr output
                         if marker_idx is not None:
-                            stderr_lines = [line for i, line in enumerate(lines) 
-                                        if i != marker_idx and i != marker_idx + 1]
+                            stderr_lines = [
+                                line
+                                for i, line in enumerate(lines)
+                                if i != marker_idx and i != marker_idx + 1
+                            ]
                             stderr_output = "\n".join(stderr_lines).strip()
                     except:
                         pass
-            
+
             return {
                 "success": exit_code == 0,
                 "exit_code": exit_code,
                 "output": stdout or "",
                 "stderr": stderr_output,
                 "return_value": return_value,
-                "error": None if exit_code == 0 else (stderr_output or stdout)
+                "error": None if exit_code == 0 else (stderr_output or stdout),
             }
         except subprocess.TimeoutExpired:
             process.kill()
@@ -95,7 +99,7 @@ def _run_subprocess_sync(code_file: str, temp_dir: str, timeout: int) -> Dict[st
                 "output": "",
                 "stderr": "",
                 "return_value": None,
-                "error": f"Execution timeout after {timeout} seconds"
+                "error": f"Execution timeout after {timeout} seconds",
             }
     except Exception as e:
         logger.error(f"Error in subprocess execution: {e}")
@@ -105,7 +109,7 @@ def _run_subprocess_sync(code_file: str, temp_dir: str, timeout: int) -> Dict[st
             "output": "",
             "stderr": "",
             "return_value": None,
-            "error": f"Execution error: {str(e)}"
+            "error": f"Execution error: {str(e)}",
         }
 
 
@@ -113,11 +117,11 @@ async def execute_python_code(code: str, timeout: int = 300) -> Dict[str, Any]:
     """
     Execute Python code in a temporary directory.
     Each execution runs in its own process and thread, allowing concurrent requests.
-    
+
     Args:
         code: Python code to execute
         timeout: Maximum execution time in seconds
-        
+
     Returns:
         Dictionary with success, exit_code, output, and error fields
     """
@@ -127,25 +131,21 @@ async def execute_python_code(code: str, timeout: int = 300) -> Dict[str, Any]:
         os.makedirs(BASE_TEMP_DIR, exist_ok=True)
         temp_dir = tempfile.mkdtemp(prefix="exec_", dir=BASE_TEMP_DIR)
         logger.info(f"Created temporary directory: {temp_dir}")
-        
+
         # Write code to a file in the temp directory
         code_file = os.path.join(temp_dir, "code.py")
         with open(code_file, "w", encoding="utf-8") as f:
             f.write(code)
-        
+
         # Run subprocess in thread pool to avoid blocking the event loop
         # This allows multiple requests to be processed concurrently
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
-            _executor,
-            _run_subprocess_sync,
-            code_file,
-            temp_dir,
-            timeout
+            _executor, _run_subprocess_sync, code_file, temp_dir, timeout
         )
-        
+
         return result
-            
+
     except Exception as e:
         logger.error(f"Error executing code: {e}")
         return {
@@ -154,7 +154,7 @@ async def execute_python_code(code: str, timeout: int = 300) -> Dict[str, Any]:
             "output": "",
             "stderr": "",
             "return_value": None,
-            "error": f"Execution error: {str(e)}"
+            "error": f"Execution error: {str(e)}",
         }
     finally:
         # Always clean up the temporary directory
@@ -174,30 +174,36 @@ async def handle_execute(request: web.Request) -> web.Response:
         data = await request.json()
         code = data.get("code", "")
         timeout = data.get("timeout", 300)
-        
+
         if not code.strip():
-            return web.json_response({
+            return web.json_response(
+                {
+                    "success": False,
+                    "exit_code": -1,
+                    "output": "",
+                    "stderr": "",
+                    "return_value": None,
+                    "error": "No code provided",
+                },
+                status=400,
+            )
+
+        result = await execute_python_code(code, timeout)
+        return web.json_response(result)
+
+    except Exception as e:
+        logger.error(f"Error handling request: {e}")
+        return web.json_response(
+            {
                 "success": False,
                 "exit_code": -1,
                 "output": "",
                 "stderr": "",
                 "return_value": None,
-                "error": "No code provided"
-            }, status=400)
-        
-        result = await execute_python_code(code, timeout)
-        return web.json_response(result)
-        
-    except Exception as e:
-        logger.error(f"Error handling request: {e}")
-        return web.json_response({
-            "success": False,
-            "exit_code": -1,
-            "output": "",
-            "stderr": "",
-            "return_value": None,
-            "error": f"Server error: {str(e)}"
-        }, status=500)
+                "error": f"Server error: {str(e)}",
+            },
+            status=500,
+        )
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -217,16 +223,16 @@ async def main():
     """Main entry point"""
     port = int(os.environ.get("SANDBOX_PORT", "8080"))
     logger.info(f"Starting sandbox HTTP server on port {port}")
-    
+
     app = create_app()
     runner = web.AppRunner(app)
     await runner.setup()
-    
+
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    
+
     logger.info(f"Sandbox server ready on port {port}")
-    
+
     # Keep running
     try:
         await asyncio.Event().wait()
@@ -240,4 +246,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
