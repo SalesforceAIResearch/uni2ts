@@ -9,7 +9,6 @@ import pandas as pd
 # warnings.filterwarnings("ignore", message=".*set_ticklabels.*should only be used with a fixed number of ticks.*")
 
 
-
 def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
