@@ -12,7 +12,7 @@ export OPENAI_API_KEY="..."
 ```
 
 ### Prepare the dataset
-- Download the `gift_ctx.parquet` data here: `https://huggingface.co/datasets/Salesforce/GiftEvalCTX`
+- Download the `gift_ctx.parquet` data here: `https://huggingface.co/datasets/Salesforce/GIFT-CTX`
 - Plot the historical data before runtime:
 ```
 python gen_image.py --in_file gift_ctx.parquet --out_file gift_ctx_image.parquet --img_root img
