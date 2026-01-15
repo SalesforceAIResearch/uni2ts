@@ -8,6 +8,8 @@ Evaluate the MoiraiAgent on the Gift-Eval dataset and write metrics to a leaderb
 pip install -r requirements.txt
 ```
 
+Note: Requires **Python >= 3.12**.
+
 ### Configure dataset path
 Download Gifteval dataset [](https://huggingface.co/datasets/Salesforce/GiftEval) into a local path and set the path accordingly in `.env` file. 
 Create `.env` file and set the following environment variable to the local path for GiftEval dataset:
