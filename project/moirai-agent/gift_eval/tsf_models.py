@@ -31,7 +31,7 @@ def get_chronos_forecast_fn(device="cuda"):
     from chronos import Chronos2Pipeline
 
     pipeline = Chronos2Pipeline.from_pretrained(
-        "s3://autogluon/chronos-2", device_map=device, dtype=torch.float32
+        "amazon/chronos-2", device_map=device, dtype=torch.float32
     )
     quantile_levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
