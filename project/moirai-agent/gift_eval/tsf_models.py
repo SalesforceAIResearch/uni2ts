@@ -135,7 +135,7 @@ def get_timesfm_forecast_fn(device="cuda"):
 def get_tirex_forecast_fn(device="cuda"):
     from tirex import ForecastModel, load_model
 
-    model: ForecastModel = load_model("NX-AI/TiRex", device=device)
+    model: ForecastModel = load_model("NX-AI/TiRex-1.1-gifteval", device=device)
     quantile_levels = ["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9"]
 
     def make_forecast_batch(
