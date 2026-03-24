@@ -1,6 +1,14 @@
 max_iterations = 6
+
+# Default configuration – uses OpenAI Responses API.
+# Set "provider" to "minimax" and "model_name" to a MiniMax model
+# (e.g. "MiniMax-M2.7") to use MiniMax via the Chat Completions API.
 CONFIG = {
     "llm": {
+        # "provider" selects the LLM backend.
+        # Supported values: "openai" (default), "minimax", "openai_compatible".
+        # For "minimax", export MINIMAX_API_KEY and set model_name accordingly.
+        "provider": "openai",
         "model_name": "gpt-5.1",
         "model_params_type": {
             "temperature": 1.0,
@@ -35,3 +43,27 @@ CONFIG = {
     "\n - Only when exact mathematical structures are inferred from the context, you may write and execute codes in the python-sandbox. Always include a print function in your codes to return valid messages. "
     f"\n - Ensure that all reasoning and tool usage is complete within a maximum of {max_iterations} steps. Each step should either advance your understanding or gather necessary information. Be systematic and thorough in your approach. A final and fully cited answer has to be output before step {max_iterations}. ",
 }
+
+# ---- Example: MiniMax configuration ----
+# To use MiniMax instead of OpenAI, export MINIMAX_API_KEY and use:
+#
+# MINIMAX_CONFIG = {
+#     "llm": {
+#         "provider": "minimax",
+#         "model_name": "MiniMax-M2.7",          # or MiniMax-M2.5-highspeed (204K ctx)
+#         "model_params_type": {
+#             "temperature": 0.7,
+#             "top_p": 1.0,
+#             "max_output_tokens": 8192,
+#         },
+#     },
+#     "servers": CONFIG["servers"],
+#     "max_iterations": max_iterations,
+#     "system_prompt": CONFIG["system_prompt"],
+# }
+#
+# Available MiniMax models:
+#   - MiniMax-M2.7            (latest, 1M context)
+#   - MiniMax-M2.7-highspeed  (faster variant)
+#   - MiniMax-M2.5            (previous gen)
+#   - MiniMax-M2.5-highspeed  (204K context, fast)
