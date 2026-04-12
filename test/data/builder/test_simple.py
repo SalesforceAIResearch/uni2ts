@@ -79,6 +79,7 @@ def test_simple_dataset_builder_wide(
         assert len(hf_dataset) == num_columns
         assert hf_dataset[0]["target"].shape == (time,)
 
+    del hf_dataset  # release file handles before removal (required on Windows)
     shutil.rmtree(str(storage_path))
 
 
@@ -132,4 +133,5 @@ def test_simple_dataset_builder_long(
     assert len(hf_dataset) == num_columns
     assert hf_dataset[0]["target"].shape == (time,)
 
+    del hf_dataset  # release file handles before removal (required on Windows)
     shutil.rmtree(str(storage_path))

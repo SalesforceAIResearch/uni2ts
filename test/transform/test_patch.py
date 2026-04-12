@@ -17,7 +17,9 @@ from contextlib import nullcontext as does_not_raise
 from typing import ContextManager, Optional
 
 import numpy as np
+import pandas as pd
 import pytest
+from gluonts.time_feature import norm_freq_str
 
 from uni2ts.transform import PackFields, PatchCrop
 from uni2ts.transform.patch import (
@@ -55,7 +57,9 @@ def fixed_patch_size_constraints(start: int, stop: Optional[int]):
 )
 def test_default_patch_size_constraints(freq: str):
     freq_constraint = DefaultPatchSizeConstraints()(freq)
-    start, stop = DefaultPatchSizeConstraints.DEFAULT_RANGES[freq[-1]]
+    offset = pd.tseries.frequencies.to_offset(freq)
+    normalized_freq = norm_freq_str(offset.name)
+    start, stop = DefaultPatchSizeConstraints.DEFAULT_RANGES[normalized_freq]
     assert min(freq_constraint) == start
     assert max(freq_constraint) == stop
 

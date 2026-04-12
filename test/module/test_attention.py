@@ -101,7 +101,10 @@ def test_all_masked(
 
     attn_mask = torch.zeros(*(batch_shape + (q_len, kv_len)), dtype=torch.bool)
     out = attn(query, key, value, attn_mask=attn_mask)
-    assert torch.isnan(out).all()
+    # PyTorch < 2.11: all-masked attention produces all-NaN output
+    # PyTorch >= 2.11: all-masked attention produces zeros before out_proj, so
+    # all query positions receive identical output (only out_proj bias contributes)
+    assert torch.isnan(out).all() or torch.all(out == out[..., :1, :])
 
 
 def test_mqa(
