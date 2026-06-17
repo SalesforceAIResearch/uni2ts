@@ -56,17 +56,17 @@ class FixedPatchSizeConstraints(PatchSizeConstraints):
 
 class DefaultPatchSizeConstraints(PatchSizeConstraints):
     # https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
+    # Keys use pandas 2.2+ normalized aliases (lowercase) returned by norm_freq_str
     DEFAULT_RANGES = {
-        "S": (64, 128),  # 512s = 8.53min, 4096s = 68.26min
-        "T": (32, 128),  # 64min = 1.07h, 512min = 8.53h
-        "H": (32, 64),  # 128h = 5.33days
+        "s": (64, 128),  # 512s = 8.53min, 4096s = 68.26min
+        "min": (32, 128),  # 64min = 1.07h, 512min = 8.53h
+        "h": (32, 64),  # 128h = 5.33days
         "D": (16, 32),
         "B": (16, 32),
         "W": (16, 32),
-        "M": (8, 32),
-        "Q": (1, 8),
-        "Y": (1, 8),
-        "A": (1, 8),
+        "ME": (8, 32),
+        "QE": (1, 8),
+        "YE": (1, 8),
     }
 
     def _get_boundaries(self, n: int, offset_name: str) -> tuple[int, int]:

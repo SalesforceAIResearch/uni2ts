@@ -65,7 +65,7 @@ def _from_long_dataframe(
             elif date_offset is not None:
                 item_df = item_df[item_df.index <= date_offset]
             yield {
-                "target": item_df.to_numpy(),
+                "target": item_df.to_numpy().astype("float32").squeeze(),
                 "start": item_df.index[0],
                 "freq": (
                     pd.infer_freq(df.index)
@@ -222,8 +222,8 @@ class SimpleDatasetBuilder(DatasetBuilder):
         example_gen_func, features = _from_dataframe(
             df, freq=freq, offset=offset, date_offset=date_offset
         )
-        hf_dataset = datasets.Dataset.from_generator(
-            example_gen_func, features=features
+        hf_dataset = datasets.Dataset.from_list(
+            list(example_gen_func()), features=features
         )
         hf_dataset.info.dataset_name = self.dataset
         hf_dataset.save_to_disk(self.storage_path / self.dataset)
@@ -308,8 +308,8 @@ class SimpleFinetuneDatasetBuilder(DatasetBuilder):
         example_gen_func, features = _from_dataframe(
             df, freq=freq, offset=offset, date_offset=date_offset
         )
-        hf_dataset = datasets.Dataset.from_generator(
-            example_gen_func, features=features
+        hf_dataset = datasets.Dataset.from_list(
+            list(example_gen_func()), features=features
         )
         hf_dataset.info.dataset_name = self.dataset
         hf_dataset.save_to_disk(
@@ -388,8 +388,8 @@ class SimpleEvalDatasetBuilder(DatasetBuilder):
             )
 
         example_gen_func, features = _from_dataframe(df, freq=freq)
-        hf_dataset = datasets.Dataset.from_generator(
-            example_gen_func, features=features
+        hf_dataset = datasets.Dataset.from_list(
+            list(example_gen_func()), features=features
         )
         hf_dataset.info.dataset_name = self.dataset
         hf_dataset.save_to_disk(

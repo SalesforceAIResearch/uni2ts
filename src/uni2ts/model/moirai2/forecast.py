@@ -42,6 +42,24 @@ from uni2ts.transform.imputation import CausalMeanImputation
 from .module import Moirai2Module
 
 
+class _QuantilePredictionNetWrapper(torch.nn.Module):
+    """Wraps Moirai2Forecast.forward to return ((output,), None, None) for
+    gluonts>=0.16 QuantileForecastGenerator compatibility."""
+
+    def __init__(self, model: "Moirai2Forecast") -> None:
+        super().__init__()
+        self.model = model
+
+    def forward(self, **kwargs):
+        output = self.model(**kwargs)
+        # output shape: (batch, num_quantiles, future_time[, *tgt])
+        # gluonts>=0.16 QuantileForecastGenerator does `output.T` per item,
+        # then asserts shape[0] == num_quantiles, so it expects the per-item
+        # tensor in (future_time, num_quantiles) order before the transpose.
+        output = output.transpose(1, 2)  # -> (batch, future_time, num_quantiles)
+        return (output,), None, None
+
+
 class Moirai2Forecast(L.LightningModule):
     def __init__(
         self,
@@ -115,7 +133,7 @@ class Moirai2Forecast(L.LightningModule):
         )
         return PyTorchPredictor(
             input_names=self.prediction_input_names,
-            prediction_net=self,
+            prediction_net=_QuantilePredictionNetWrapper(self),
             batch_size=batch_size,
             prediction_length=self.hparams.prediction_length,
             input_transform=self.get_default_transform() + instance_splitter,

@@ -67,16 +67,15 @@ We first load our data using pandas, in the form of a wide DataFrame.
 Uni2TS relies on GluonTS for inference as it provides many convenience functions for time series forecasting, such as splitting a dataset into a train/test split and performing rolling evaluations, as demonstrated below.
 
 ```python
-import torch
 import matplotlib.pyplot as plt
 import pandas as pd
 from gluonts.dataset.pandas import PandasDataset
 from gluonts.dataset.split import split
-from huggingface_hub import hf_hub_download
 
 from uni2ts.eval_util.plot import plot_single
 from uni2ts.model.moirai import MoiraiForecast, MoiraiModule
 from uni2ts.model.moirai_moe import MoiraiMoEForecast, MoiraiMoEModule
+from uni2ts.model.moirai2 import Moirai2Forecast, Moirai2Module
 
 MODEL = "moirai2"  # model name: choose from {'moirai', 'moirai-moe', 'moirai2'}
 SIZE = "small"  # model size: choose from {'small', 'base', 'large'}
@@ -133,11 +132,9 @@ elif MODEL == "moirai-moe":
     )
 elif MODEL == "moirai2":
     model = Moirai2Forecast(
-        module=Moirai2Module.from_pretrained(
-            f"Salesforce/moirai-2.0-R-small",
-        ),
-        prediction_length=100,
-        context_length=1680,
+        module=Moirai2Module.from_pretrained("Salesforce/moirai-2.0-R-small"),
+        prediction_length=PDT,
+        context_length=CTX,
         target_dim=1,
         feat_dynamic_real_dim=0,
         past_feat_dynamic_real_dim=0,
@@ -155,10 +152,10 @@ label = next(label_it)
 forecast = next(forecast_it)
 
 plot_single(
-    inp, 
-    label, 
-    forecast, 
-    context_length=200,
+    inp,
+    label,
+    forecast,
+    context_length=CTX,
     name="pred",
     show_label=True,
 )
