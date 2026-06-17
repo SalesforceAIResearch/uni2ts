@@ -16,7 +16,7 @@ dependencies = [
   "einops==0.7.*",
   "jaxtyping~=0.2.24",
   "python-dotenv==1.0.0",
-  "hydra-core==1.3",
+  "hydra-core>=1.3,<2",
   "orjson",
   "tensorboard",
   "multiprocess",
