@@ -6,10 +6,25 @@ First, set up the environment by running:
 ```
 pip install -r requirement.txt
 ```
-And export your OpenAI key by:
+
+#### OpenAI (default)
+Export your OpenAI key:
 ```
 export OPENAI_API_KEY="..."
 ```
+
+#### MiniMax (alternative)
+To use [MiniMax](https://www.minimaxi.com/) as the LLM provider, export your MiniMax API key and update the config:
+```bash
+export MINIMAX_API_KEY="..."
+```
+Then set `"provider": "minimax"` and `"model_name": "MiniMax-M2.7"` in your config file (see `src/ctx_forecast/config.py` for a full example). Available models:
+| Model | Context | Notes |
+|---|---|---|
+| `MiniMax-M2.7` | 1M tokens | Latest, recommended |
+| `MiniMax-M2.7-highspeed` | 1M tokens | Faster variant |
+| `MiniMax-M2.5` | 204K tokens | Previous generation |
+| `MiniMax-M2.5-highspeed` | 204K tokens | Fast |
 
 ### Prepare the dataset
 - Download the `gift_ctx.parquet` data here: `https://huggingface.co/datasets/Salesforce/GIFT-CTX`

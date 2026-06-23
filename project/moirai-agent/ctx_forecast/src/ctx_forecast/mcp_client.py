@@ -6,14 +6,13 @@ from typing import Any, Dict, List, Optional
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from openai import OpenAI
+from src.ctx_forecast.llm_provider import create_llm_provider
 from src.ctx_forecast.utils import encode_image, parse_values_from_string
 
 
 class MCPClient:
     def __init__(self, config):
-        # self.openai = OpenAI()
-        self.openai = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        self.provider = create_llm_provider(config)
         self.system_prompt = config["system_prompt"]
         self.model_name = config["llm"]["model_name"]
         self.model_params = config["llm"]["model_params_type"]
@@ -148,7 +147,7 @@ class MCPClient:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                reply = self.openai.responses.create(
+                reply = self.provider.create(
                     model=self.model_name,
                     instructions=instructions,
                     input=context,
